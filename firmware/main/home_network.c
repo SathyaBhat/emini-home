@@ -398,10 +398,7 @@ esp_err_t home_network_start(void)
     ap.ap.pmf_cfg.required = false;
     if ((e = esp_wifi_set_config(WIFI_IF_AP, &ap)) != ESP_OK)
         return e;
-    bool paired = false;
-    for (unsigned i = 0; i < 4; ++i)
-        paired |= home_runtime.secrets.token_used[i] != 0;
-    ap_enabled = !home_runtime.secrets.ssid[0] || !paired;
+    ap_enabled = !home_runtime.secrets.ssid[0];
     /* Choose the final boot mode before starting association. Switching APSTA
      * to STA from the control task used to race the first connection attempt. */
     if (!ap_enabled && (e = esp_wifi_set_mode(WIFI_MODE_STA)) != ESP_OK)

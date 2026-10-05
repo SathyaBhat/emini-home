@@ -2300,7 +2300,15 @@ void home_render(const home_config_t *cfg, const home_data_t *data, home_screen_
         air(&c, cfg, &data->air, now);
     else if (screen == HOME_NOTE)
         note(&c, cfg, now);
-    else {
+    else if (screen == HOME_PICTURE) {
+        /* Drawn only until a picture arrives; home_render_locked() shows the picture itself. No
+         * Chinese entry: the glyph slices hold only the characters already in the table. */
+        canvas_t card = {frame, 1, 2, c.lang, RASTER_NOISE, RASTER_NOISE};
+        status(&card, cfg->name, sizeof cfg->name,
+               tr(c.lang, "No picture yet.", "Jeszcze bez obrazu."),
+               tr(c.lang, "Send a 400 x 300 four-colour frame to /api/picture from your computer.",
+                  "Wyślij z komputera klatkę 400 x 300 w czterech kolorach na /api/picture."));
+    } else {
         /* Status keeps its fixed texture and intensity, as home_render_status() does. */
         canvas_t card = {frame, 1, 2, c.lang, RASTER_NOISE, RASTER_NOISE};
         /* Air exists in the settings since 0.5.0; its card comes next. */
