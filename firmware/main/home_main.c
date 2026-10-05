@@ -3,6 +3,7 @@
 #include "home_places.h"
 #include "home_discovery.h"
 #include "home_panel.h"
+#include "home_picture.h"
 #include "home_power.h"
 #include "home_store.h"
 #include "home_wake.h"
@@ -42,7 +43,9 @@ void home_render_locked(const home_config_t *c, const home_data_t *d, int screen
                         uint8_t *frame)
 {
     xSemaphoreTake(render_lock, portMAX_DELAY);
-    home_render(c, d, screen, now, frame);
+    /* Picture is the frame as it was sent; home_render() draws its card until there is one. */
+    if (screen != HOME_PICTURE || !home_picture_load(frame))
+        home_render(c, d, screen, now, frame);
     xSemaphoreGive(render_lock);
 }
 bool home_localtime(const home_config_t *c, time_t now, struct tm *out)
@@ -141,6 +144,8 @@ static bool screen_has_data(int s)
         return c->location_ready; /* computed on the device, nothing to download */
     case HOME_AIR:
         return c->location_ready && d->air.meta.valid;
+    case HOME_PICTURE:
+        return home_picture_present();
     default:
         return false;
     }
@@ -869,6 +874,10 @@ void app_main(void)
         ESP_LOGE(TAG, "Crypto initialization failed");
         abort();
     }
+    /* After crypto: a saved picture is checked against its hash. Without one Picture shows its
+     * card, so a failure here is not a reason to stop. */
+    if (home_picture_init() != ESP_OK)
+        ESP_LOGW(TAG, "Picture storage unavailable");
     if (!home_runtime.secrets.ap_password[0]) {
         bootloader_random_enable();
         const char alphabet[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -926,10 +935,8 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(home_server_start());
     ESP_ERROR_CHECK(home_usb_start());
-    bool paired = false;
-    for (int i = 0; i < 4; i++)
-        paired |= home_runtime.secrets.token_used[i] != 0;
-    if (!home_runtime.secrets.ssid[0] || !paired)
+    /* No pairing (see auth() in home_server.c): only a missing Wi-Fi network means setup. */
+    if (!home_runtime.secrets.ssid[0])
         home_begin_pairing();
     else
         home_runtime.manual_until = esp_timer_get_time();

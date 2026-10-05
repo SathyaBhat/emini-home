@@ -10,12 +10,12 @@ idf_component_register(SRCS
     "home_fetch.c" "home_parse.c" "home_render.c" "home_location.c" "generated/home_font.c"
     "home_places.c" "generated/home_zones.c" "home_discovery.c" "home_usb.c" "home_battery.c"
     "home_parse_air.c" "home_sky.c" "home_power.c" "home_wake.c"
-    "home_panel.c"
+    "home_panel.c" "home_picture.c"
     INCLUDE_DIRS "."
     PRIV_REQUIRES esp_driver_gpio esp_driver_spi esp_timer esp_system esp_event esp_pm
     esp_driver_usb_serial_jtag
     esp_netif esp_wifi esp_http_server esp-tls mbedtls home_json nvs_flash
-    bootloader_support esp_psram mdns home_qr esp_adc esp_app_format
+    bootloader_support esp_psram mdns home_qr esp_adc esp_app_format esp_partition
     EMBED_FILES ${ui_files})
 if(HOME_PM_PROFILE)
     # Diagnostic build only: idf.py -DHOME_PM_PROFILE=1

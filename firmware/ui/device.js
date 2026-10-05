@@ -19,7 +19,8 @@
     }
   };
   const S = {
-    token: read("home.token") || "",
+    // No pairing: Home lets in every request from its own page, so any token will do.
+    token: "local",
     lang: read("home.language") || "en",
     theme: read("home.theme") || "light",
     config: null,
@@ -98,11 +99,13 @@
       note: "Your note",
       sky: "Sky",
       air: "Air",
+      picture: "Picture",
       weatherDesc: "The pulse of your place",
       feedDesc: "News from around the world",
       noteDesc: "A few words of your own",
       skyDesc: "Sun and moon over your place",
       airDesc: "Air quality, UV and pollen",
+      pictureDesc: "A frame you send from your computer",
       skySource:
         "Worked out on the device from the place you saved; nothing is downloaded.",
       airSource:
@@ -376,11 +379,13 @@
       note: "Twoja kartka",
       sky: "Niebo",
       air: "Powietrze",
+      picture: "Obraz",
       weatherDesc: "Puls Twojego miejsca",
       feedDesc: "Wiadomości ze świata",
       noteDesc: "Kilka własnych słów",
       skyDesc: "Słońce i księżyc nad Twoim miejscem",
       airDesc: "Jakość powietrza, UV i pyłki",
+      pictureDesc: "Klatka wysłana z komputera",
       skySource:
         "Liczone na urządzeniu z zapisanej lokalizacji; nic nie jest pobierane.",
       airSource:
@@ -661,6 +666,7 @@
     note: '<path d="M4 3h16v13l-5 5H4V3Zm11 18v-5h5M8 8h8m-8 4h5"/>',
     sky: '<path d="M3 17a9 9 0 0 1 18 0"/><path d="M1 17h2m18 0h2M12 4v2M5.6 7.6 7 9m10.4-1.4L16 9"/><circle cx="12" cy="17" r="3"/>',
     air: '<path d="M3 8h11a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h8"/>',
+    picture: '<rect x="3" y="5" width="18" height="14" rx="1"/><path d="m3 16 5-5 4 4 3-3 6 6"/>',
     palette:
       '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18M3 12h18"/>',
     globe:
@@ -927,6 +933,7 @@
     setTimeout(poll, 1000);
   }
   function sourceLabel(screen) {
+    if (screen === "picture") return say("Sent from your computer", "Wysłany z komputera");
     if (screen === "note")
       return S.config?.note
         ? say("Your words", "Twoje słowa")
@@ -1079,17 +1086,23 @@
                     ["pm25", t("airPM")],
                   ],
                 )}`
-              : `<label class="field"><span>${t("noteText")}</span><textarea data-path="note" maxlength="240" rows="5" placeholder="${say("What matters today?", "Co jest dziś ważne?")}">${esc(S.draft.note)}</textarea><small>${t("noteHelp")}<span id="note-count">${noteSpace(S.draft.note)}</span><progress id="note-meter" max="100" value="${Math.min(100, C.noteUsage(S.draft.note).percent)}" aria-label="${esc(noteSpace(S.draft.note))}"></progress></small></label>`
-    }</div></div><div class="form-section"><h2>${say("How it looks", "Jak wygląda")}</h2><div class="fields">${select(
-      "styles." + s,
-      "layout",
-      [
-        ["print", t("print")],
-        ["rhythm", t("rhythmStyle")],
-        ["atlas", t("atlas")],
-        ["cycle", t("cycleStyle")],
-      ],
-    )}${styleHints(s)}<button class="setting-link" data-action="appearance-settings">${icon("palette")}<span>${say("Texture, colour and larger text", "Faktura, kolor i większy tekst")}</span>${icon("arrow")}</button></div></div><div class="form-section"><h2>${say("In your collection", "W Twojej kolekcji")}</h2><label class="check"><span>${t("enabled")}</span><input type="checkbox" data-path="enabled.${index}" ${S.draft.enabled[index] ? "checked" : ""} ${last ? "disabled" : ""}></label>${last ? `<p class="hint">${say("Keep at least one screen enabled.", "Co najmniej jeden ekran musi pozostać aktywny.")}</p>` : ""}<div class="order-control"><button data-action="move" data-direction="-1" ${position === 0 ? "disabled" : ""}>↑ ${t("earlier")}</button><span>${position + 1} / ${C.screens.length}</span><button data-action="move" data-direction="1" ${position === C.screens.length - 1 ? "disabled" : ""}>↓ ${t("later")}</button></div></div></section><aside class="editor-aside"><section class="edit-preview"><div class="preview-title"><h2 id="preview-heading">${t("savedPreview")}</h2><button class="icon-label-button" data-action="native-preview" data-kind="draft">${icon("screens")}<span>1:1</span></button></div><canvas data-screen="${s}" width="400" height="300" role="img" aria-label="${esc(t("savedPreview"))}" ${!S.frames[s] ? "hidden" : ""}></canvas><p class="hint" id="preview-missing" ${S.frames[s] ? "hidden" : ""}>${t("previewMissing")}</p><p class="hint" id="draft-preview" ${!S.dirty ? "hidden" : ""}>${t("draftPreview")}</p><p class="hint">${t("photoHint")}</p></section><div id="source-holder">${sourceBlock(s)}</div></aside></div></section>`;
+              : s === "picture"
+                ? `<p class="hint">${say("Send a 400 × 300 four-colour frame to /api/picture from your computer; the phone panel does not upload pictures.", "Wyślij z komputera klatkę 400 × 300 w czterech kolorach na /api/picture; panel w telefonie nie wysyła obrazów.")}</p>`
+                : `<label class="field"><span>${t("noteText")}</span><textarea data-path="note" maxlength="240" rows="5" placeholder="${say("What matters today?", "Co jest dziś ważne?")}">${esc(S.draft.note)}</textarea><small>${t("noteHelp")}<span id="note-count">${noteSpace(S.draft.note)}</span><progress id="note-meter" max="100" value="${Math.min(100, C.noteUsage(S.draft.note).percent)}" aria-label="${esc(noteSpace(S.draft.note))}"></progress></small></label>`
+    }</div></div>${
+      s === "picture"
+        ? ""
+        : `<div class="form-section"><h2>${say("How it looks", "Jak wygląda")}</h2><div class="fields">${select(
+            "styles." + s,
+            "layout",
+            [
+              ["print", t("print")],
+              ["rhythm", t("rhythmStyle")],
+              ["atlas", t("atlas")],
+              ["cycle", t("cycleStyle")],
+            ],
+          )}${styleHints(s)}<button class="setting-link" data-action="appearance-settings">${icon("palette")}<span>${say("Texture, colour and larger text", "Faktura, kolor i większy tekst")}</span>${icon("arrow")}</button></div></div>`
+    }<div class="form-section"><h2>${say("In your collection", "W Twojej kolekcji")}</h2><label class="check"><span>${t("enabled")}</span><input type="checkbox" data-path="enabled.${index}" ${S.draft.enabled[index] ? "checked" : ""} ${last ? "disabled" : ""}></label>${last ? `<p class="hint">${say("Keep at least one screen enabled.", "Co najmniej jeden ekran musi pozostać aktywny.")}</p>` : ""}<div class="order-control"><button data-action="move" data-direction="-1" ${position === 0 ? "disabled" : ""}>↑ ${t("earlier")}</button><span>${position + 1} / ${C.screens.length}</span><button data-action="move" data-direction="1" ${position === C.screens.length - 1 ? "disabled" : ""}>↓ ${t("later")}</button></div></div></section><aside class="editor-aside"><section class="edit-preview"><div class="preview-title"><h2 id="preview-heading">${t("savedPreview")}</h2><button class="icon-label-button" data-action="native-preview" data-kind="draft">${icon("screens")}<span>1:1</span></button></div><canvas data-screen="${s}" width="400" height="300" role="img" aria-label="${esc(t("savedPreview"))}" ${!S.frames[s] ? "hidden" : ""}></canvas><p class="hint" id="preview-missing" ${S.frames[s] ? "hidden" : ""}>${t("previewMissing")}</p><p class="hint" id="draft-preview" ${!S.dirty ? "hidden" : ""}>${t("draftPreview")}</p><p class="hint">${t("photoHint")}</p></section><div id="source-holder">${sourceBlock(s)}</div></aside></div></section>`;
   }
   function settingsMenu() {
     const rows = [
@@ -1217,7 +1230,7 @@
     )}${check("clock24", "clock")}</div></section>`;
   }
   function deviceSettings() {
-    return `<section class="settings-detail">${backButton("settings-back")}<div class="page-title"><span class="title-icon">${icon("info")}</span><div><h1>${t("device")}</h1><p>${esc(S.config.name)}</p></div></div><div class="device-summary"><dl class="device-facts"><dt>${t("version")}</dt><dd>${esc(S.status?.version || "—")}</dd><dt>${t("address")}</dt><dd>${esc(S.status?.address || location.host)}</dd><dt>${t("deviceStatus")}</dt><dd id="settings-state">${statusName()}</dd><dt>${t("generation")}</dt><dd id="settings-generation">${esc(S.frameGeneration ?? "—")}</dd><dt>${t("duration")}</dt><dd>${S.status?.refresh_ms ? (S.status.refresh_ms / 1000).toFixed(1) + " s" : "—"}</dd></dl></div><div class="help-section"><h2>${say("Connect another phone", "Połącz kolejny telefon")}</h2><p>${t("pairNote")}</p><p>${say("Use the same local address on each visit. Your phone remembers access for that address.", "Korzystaj za każdym razem z tego samego lokalnego adresu. Telefon zapamiętuje dostęp do tego adresu.")}</p></div><button class="disconnect-button" data-action="unpair">${t("forget")}</button></section>`;
+    return `<section class="settings-detail">${backButton("settings-back")}<div class="page-title"><span class="title-icon">${icon("info")}</span><div><h1>${t("device")}</h1><p>${esc(S.config.name)}</p></div></div><div class="device-summary"><dl class="device-facts"><dt>${t("version")}</dt><dd>${esc(S.status?.version || "—")}</dd><dt>${t("address")}</dt><dd>${esc(S.status?.address || location.host)}</dd><dt>${t("deviceStatus")}</dt><dd id="settings-state">${statusName()}</dd><dt>${t("generation")}</dt><dd id="settings-generation">${esc(S.frameGeneration ?? "—")}</dd><dt>${t("duration")}</dt><dd>${S.status?.refresh_ms ? (S.status.refresh_ms / 1000).toFixed(1) + " s" : "—"}</dd></dl></div></section>`;
   }
   function wifiError(code) {
     return (
@@ -1561,7 +1574,7 @@
     S.wifiRequested = false;
     S.wifiAwaitingStatus = false;
     S.setupDismissed = false;
-    S.token = "";
+    S.token = "local";
     write("home.token", null);
     S.config = null;
     S.draft = null;
@@ -2038,6 +2051,7 @@
       d = S.draft,
       sources = S.status?.sources;
     if (!c || !d) return false;
+    if (screen === "picture") return true;
     if (screen === "weather")
       return (
         c.location_ready !== false &&
@@ -2289,7 +2303,7 @@
   function sourceBlock(s) {
     /* Note is typed here and Sky is computed on the device: neither has anything
        to fetch. Air does, so it gets the block and names its provider. */
-    if (s === "note" || s === "sky") return "";
+    if (s === "note" || s === "sky" || s === "picture") return "";
     const v = S.status?.sources?.[s] || {};
     const name = [
       "fresh",

@@ -7,6 +7,7 @@
 #include "home_config.h"
 #include "home_places.h"
 #include "home_wake.h"
+#include "home_picture.h"
 #include "esp_http_server.h"
 #include "esp_timer.h"
 #include "esp_random.h"
@@ -111,30 +112,13 @@ static bool origin_ok(httpd_req_t *r)
     }
     return true;
 }
+/* No pairing: Home is used on a trusted home network, so every request that passed origin_ok() -
+ * addressed to Home itself, from Home's own page or from no page at all - is let in as slot 0.
+ * A token a browser or tools/home_cli.py still sends is ignored. */
 static int auth(httpd_req_t *r)
 {
-    char value[80];
-    if (!header(r, "Authorization", value, sizeof(value)) || strncmp(value, "Bearer ", 7) ||
-        strlen(value + 7) != 64)
-        return -1;
-    for (int i = 7; i < 71; i++)
-        if (!((value[i] >= '0' && value[i] <= '9') || (value[i] >= 'a' && value[i] <= 'f')))
-            return -1;
-    uint8_t hash[32];
-    if (!home_hash(value + 7, 64, hash))
-        return -1;
-    int match = -1;
-    home_lock();
-    for (int i = 0; i < 4; i++) {
-        volatile unsigned diff = 0;
-        for (int n = 0; n < 32; n++)
-            diff |= hash[n] ^ home_runtime.secrets.token_hash[i][n];
-        if (!diff && home_runtime.secrets.token_used[i])
-            match = i;
-    }
-    home_unlock();
-    memset(value, 0, sizeof(value));
-    return match;
+    (void)r;
+    return 0;
 }
 static char *body(httpd_req_t *r)
 {
@@ -165,6 +149,42 @@ static char *body(httpd_req_t *r)
         return NULL;
     }
     return b;
+}
+/* POST /api/picture: exactly one raw frame, packed like home_render()'s output. Stored first, then
+ * drawn only if Picture is on the display now; showing it is /api/show, as for every screen. */
+static esp_err_t picture_upload(httpd_req_t *r)
+{
+    char type[48];
+    if (!header(r, "Content-Type", type, sizeof(type)) ||
+        strcmp(type, "application/octet-stream") || r->content_len != HOME_FRAME_BYTES)
+        return error(r, "400 Bad Request", "Expected a 30000 byte application/octet-stream frame");
+    uint8_t *frame = malloc(HOME_FRAME_BYTES);
+    if (!frame)
+        return error(r, "503 Service Unavailable", "out_of_memory");
+    size_t pos = 0;
+    int64_t start = esp_timer_get_time();
+    while (pos < HOME_FRAME_BYTES) {
+        int n = esp_timer_get_time() - start > 10000000
+                    ? -1
+                    : httpd_req_recv(r, (char *)frame + pos, HOME_FRAME_BYTES - pos);
+        if (n <= 0) {
+            free(frame);
+            return error(r, "400 Bad Request", "Frame did not arrive");
+        }
+        pos += n;
+    }
+    esp_err_t e = home_picture_store(frame);
+    free(frame);
+    if (e != ESP_OK)
+        return error(r, "503 Service Unavailable", "Picture was not saved");
+    home_lock();
+    if (home_runtime.displayed_screen == HOME_PICTURE ||
+        home_runtime.pending_screen == HOME_PICTURE) {
+        home_runtime.dirty = true;
+        home_runtime.request_id++;
+    }
+    home_unlock();
+    return accepted(r);
 }
 static cJSON *small_json(const char *b)
 {
@@ -287,10 +307,7 @@ static esp_err_t status(httpd_req_t *r, int token)
     cJSON *j = cJSON_CreateObject();
     home_lock();
     home_runtime_t *h = &home_runtime;
-    int count = 0;
-    for (int i = 0; i < 4; i++)
-        count += h->secrets.token_used[i] ? 1 : 0;
-    bool ok = j && cJSON_AddBoolToObject(j, "paired", count > 0) &&
+    bool ok = j && cJSON_AddBoolToObject(j, "paired", true) &&
               cJSON_AddBoolToObject(j, "online", h->online) &&
               cJSON_AddBoolToObject(j, "setup", h->setup) &&
               cJSON_AddStringToObject(j, "name", h->config.name) &&
@@ -349,7 +366,7 @@ static esp_err_t status(httpd_req_t *r, int token)
              cJSON_AddNumberToObject(metrics, "loop_wakes", home_loop_wakes()) &&
              cJSON_AddNumberToObject(metrics, "busy_polls", home_panel_busy_polls()) &&
              cJSON_AddNumberToObject(j, "config_revision", h->config.revision) &&
-             cJSON_AddNumberToObject(j, "paired_clients", count) &&
+             cJSON_AddNumberToObject(j, "paired_clients", 0) &&
              cJSON_AddNumberToObject(j, "pause_remaining",
                                      h->manual_until > esp_timer_get_time()
                                          ? (h->manual_until - esp_timer_get_time()) / 1000000
@@ -538,6 +555,8 @@ static esp_err_t api_inner(httpd_req_t *r)
     }
     if (r->method != HTTP_POST && !(r->method == HTTP_PUT && !strcmp(path, "/api/config")))
         return error(r, "405 Method Not Allowed", "Method not allowed");
+    if (!strcmp(path, "/api/picture"))
+        return picture_upload(r);
     char *b = body(r);
     if (!b)
         return error(r, "400 Bad Request", "Expected bounded JSON body");
@@ -796,16 +815,8 @@ static esp_err_t api_inner(httpd_req_t *r)
             result = error(r, "400 Bad Request", "Expected empty object");
             goto done;
         }
-        home_lock();
-        home_secrets_t s = home_runtime.secrets;
-        memset(s.token_hash[token], 0, 32);
-        s.token_used[token] = 0;
-        esp_err_t e = home_store_secrets(&s);
-        if (e == ESP_OK)
-            home_runtime.secrets = s;
-        home_unlock();
-        memset(&s, 0, sizeof(s));
-        result = e == ESP_OK ? accepted(r) : error(r, "503 Service Unavailable", "Unpair failed");
+        /* Nothing to forget without pairing; the stored tokens are left as they were. */
+        result = accepted(r);
         goto done;
     }
     result = error(r, "404 Not Found", "Unknown endpoint");

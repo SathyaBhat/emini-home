@@ -33,10 +33,12 @@
   }
   const boot = createBootGuard(root);
   if (boot) root.HomeBoot = boot;
-  // Since 0.5.0 five screens; "sky" and "air" are off by default and come last.
-  // Settings and recipes written before 0.5.0 list only the first three (LEGACY).
-  const screens = ["weather", "feed", "note", "sky", "air"];
+  // Since 0.5.0 five screens, six with "picture"; the new ones are off by default and come last.
+  // Settings and recipes written before 0.5.0 list only the first three (LEGACY), before
+  // Picture five (FIVE).
+  const screens = ["weather", "feed", "note", "sky", "air", "picture"];
   const LEGACY = 3;
+  const FIVE = 5;
   // "cycle" = Print, Rhythm and Atlas take turns. Previews never send it.
   const styles = ["print", "rhythm", "atlas", "cycle"];
   const geocoder = "https://geocoding-api.open-meteo.com/v1/search";
@@ -591,9 +593,9 @@
         c.interval_min >= 5 &&
         c.interval_min <= 1440,
     );
-    // Same shapes as home_config.c: three (before 0.5.0) or all five screens.
+    // Same shapes as home_config.c: three (before 0.5.0), five (before Picture) or all screens.
     const listed = (x) =>
-      Array.isArray(x) && (x.length === LEGACY || x.length === screens.length);
+      Array.isArray(x) && (x.length === LEGACY || x.length === FIVE || x.length === screens.length);
     check(
       "enabled",
       listed(c.enabled) &&

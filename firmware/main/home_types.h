@@ -5,16 +5,19 @@
 #include <stddef.h>
 
 #define HOME_SCHEMA 1
-/* Since 0.5.0 five screens. Settings saved by 0.4.x list three: the decoder
- * appends the missing ones at the end of the order, switched off, so the record
+/* Since 0.5.0 five screens, six with Picture. Settings saved by 0.4.x list three and by 0.5-0.6
+ * five: the decoder appends the missing ones at the end of the order, switched off, so the record
  * stays readable and the schema does not change. */
-#define HOME_SCREEN_COUNT 5
+#define HOME_SCREEN_COUNT 6
 /* Moments of the "Day rhythm", not screens: three, as in every version so far. */
 #define HOME_DAY_SLOTS 3
 #define HOME_FRAME_BYTES 30000
 #define HOME_NOTE_BYTES 241
 #define HOME_FEED_URL_BYTES 513
-typedef enum { HOME_WEATHER=0, HOME_FEED=1, HOME_NOTE=2, HOME_SKY=3, HOME_AIR=4 } home_screen_t;
+/* Picture shows a frame sent over /api/picture as it is; it has no compositions. */
+typedef enum {
+    HOME_WEATHER=0, HOME_FEED=1, HOME_NOTE=2, HOME_SKY=3, HOME_AIR=4, HOME_PICTURE=5
+} home_screen_t;
 typedef enum { HOME_FIXED=0, HOME_DAY=1, HOME_ROTATE=2 } home_mode_t;
 /* HOME_CYCLE is stored in the config only; drawing always gets one of the first three. */
 typedef enum { HOME_PRINT=0, HOME_RHYTHM=1, HOME_ATLAS=2, HOME_CYCLE=3 } home_style_t;
