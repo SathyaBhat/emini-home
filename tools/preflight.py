@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Tomasz Fiedoruk
-"""Check a NOTE4C flash backup before installing emini Home.
+"""Check a NOTE4C flash backup before installing Inifuss.
 
 This script never talks to the device and never uses the network. It reads
 two full flash backups made with esptool and, optionally, the two release
@@ -21,7 +21,7 @@ import sys
 
 FLASH_BYTES = 16 * 1024 * 1024
 
-# Regions and reference hashes of the factory NOTE4C layout that emini Home
+# Regions and reference hashes of the factory NOTE4C layout that Inifuss
 # was installed on and verified with. A unit that differs is not rejected as
 # broken; it is simply not a layout this release was tested on.
 BOOTLOADER = (0x0000, 0x8000, "7d914bc1cd69da88931aa21e7c596b33f70fae0edcad46cdba39b611e305d025")
@@ -42,7 +42,7 @@ APP_DESC_MAGIC = slice(32, 36)  # esp_app_desc_t.magic_word
 APP_DESC_MAGIC_WORD = b"\x32\x54\xcd\xab"
 APP_VERSION = slice(48, 80)  # esp_app_desc_t.version
 APP_PROJECT = slice(80, 112)  # esp_app_desc_t.project_name
-PROJECT_NAME = b"emini_home_g3"
+PROJECT_NAMES = (b"inifuss", b"emini_home_g3")  # 0.7 and later, and 0.6 and earlier
 
 
 def sha256(data):
@@ -91,23 +91,23 @@ def evaluate(first, second=None):
         return True, lines
 
     if table == HOME_TABLE:
-        lines.append("emini Home partition layout found; your Home settings will be kept.")
+        lines.append("Inifuss partition layout found; your Home settings will be kept.")
         lines.append("READY: update or reinstall.")
         return True, lines
 
-    return stop("the partition table is neither the factory NOTE4C layout nor emini Home's.")
+    return stop("the partition table is neither the factory NOTE4C layout nor Inifuss's.")
 
 
 def release_problem(table, app):
     """Return why the files for step 6 must not be written, or None."""
     if sha256(table) != RELEASE_TABLE:
-        return "the partition table file is not the emini Home partition table."
+        return "the partition table file is not the Inifuss partition table."
     if not (256 < len(app) <= APP_SLOT_BYTES
             and app[0] == IMAGE_MAGIC
             and app[CHIP_ID] == ESP32S3_CHIP_ID
             and app[APP_DESC_MAGIC] == APP_DESC_MAGIC_WORD
-            and app[APP_PROJECT].split(b"\0")[0] == PROJECT_NAME):
-        return "the application file is not an emini Home image for the ESP32-S3."
+            and app[APP_PROJECT].split(b"\0")[0] in PROJECT_NAMES):
+        return "the application file is not an Inifuss image for the ESP32-S3."
     return None
 
 
@@ -142,7 +142,7 @@ def main(argv):
         if problem:
             print("STOP: " + problem)
             return 2
-        print("Application file: emini Home %s for the ESP32-S3." % app_version(files[3]))
+        print("Application file: Inifuss %s for the ESP32-S3." % app_version(files[3]))
     ready, lines = evaluate(files[0], files[1])
     print("\n".join(lines))
     if ready and len(files) == 4:

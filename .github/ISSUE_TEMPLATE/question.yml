@@ -1,17 +1,17 @@
 name: Question
-description: Ask about installing or using emini Home.
+description: Ask about installing or using Inifuss.
 title: "[question] "
 labels: ["question"]
 body:
   - type: markdown
     attributes:
       value: |
-        Please check the [installation guide](https://github.com/fiedoruk/emini-home/blob/main/docs/INSTALL.md) and the [phone panel guide](https://github.com/fiedoruk/emini-home/blob/main/docs/PANEL.md) first.
+        Please check the [installation guide](https://github.com/SathyaBhat/emini-home/blob/main/docs/INSTALL.md) and the [phone panel guide](https://github.com/SathyaBhat/emini-home/blob/main/docs/PANEL.md) first.
         Never post flash backups, Wi-Fi passwords, pairing codes, access tokens or photos of the setup screen.
   - type: input
     id: firmware
     attributes:
-      label: emini Home version
+      label: Inifuss version
       placeholder: "0.6.2"
   - type: textarea
     id: question

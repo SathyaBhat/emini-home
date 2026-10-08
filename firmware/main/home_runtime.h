@@ -31,6 +31,9 @@ typedef struct {
     home_counters_t counters;
     home_power_log_t power_log;
     uint8_t refresh_requested;
+    /* Pushed values (POST /api/home): when a push last drew the picture, and a store still owed. */
+    int64_t push_redraw_at, push_store_at;
+    bool push_store_due;
     unsigned api_active;
     /* The last gesture the device recognised, so a press can be checked without a cable. */
     int key_last, key_last_ms;

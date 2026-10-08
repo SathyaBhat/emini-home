@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Drive emini Home from a computer on the same network: the note and the screen.
+"""Drive Inifuss from a computer on the same network: the note and the screen.
 
     python3 tools/home_cli.py --host 192.168.1.50 note "Bins out tonight" --show
     python3 tools/home_cli.py show weather
     python3 tools/home_cli.py frame now.png                    # what the display shows
 
-The host is --host or $EMINI_HOST: the device's address or its name.local, exactly as the phone
+The host is --host or $INIFUSS_HOST (or the older $EMINI_HOST): the device's address or its name.local, exactly as the phone
 panel reaches it. This firmware has no pairing: anything on the local network is let in. (Against
 firmware that still pairs, `pair CODE` with the code shown after holding OK keeps the token in
-~/.config/emini-home/<host>.token, readable only by you, and it is sent from then on.)
+~/.config/inifuss/<host>.token, readable only by you, and it is sent from then on.)
 
 In Breath mode (the default) Wi-Fi is off between fetches, so the device answers for about five
 minutes after a press of OK. Anything unattended - a Home Assistant automation - needs Open mode.
@@ -40,7 +40,9 @@ class HomeError(Exception):
 
 
 def token_path(host):
-    return Path.home() / ".config" / "emini-home" / (host + ".token")
+    new = Path.home() / ".config" / "inifuss" / (host + ".token")
+    old = Path.home() / ".config" / "emini-home" / (host + ".token")
+    return old if old.exists() and not new.exists() else new
 
 
 def request(host, method, path, body=None, token=None, raw=False):
@@ -144,7 +146,9 @@ def to_png(frame, out):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--host", default=os.environ.get("EMINI_HOST"))
+    parser.add_argument(
+        "--host", default=os.environ.get("INIFUSS_HOST") or os.environ.get("EMINI_HOST")
+    )
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("pair", help="pair with firmware that still asks for it")
     p.add_argument("code")
@@ -154,6 +158,14 @@ def main():
     p = sub.add_parser("show", help="show a screen now")
     p.add_argument("screen", choices=SCREENS)
     sub.add_parser("bins", help="print the next four bin collections")
+    p = sub.add_parser("push", help="push home values (battery, lines) to POST /api/home")
+    p.add_argument("--battery", type=float, metavar="PERCENT")
+    p.add_argument("--kwh", type=float)
+    p.add_argument("--ttl", type=int, metavar="MIN", help="minutes until the battery goes stale")
+    p.add_argument("--clear-battery", action="store_true")
+    p.add_argument("--line", action="append", default=[], metavar="LEVEL:TEXT",
+                   help="warn|info|outline:text, up to three; none given leaves the lines alone")
+    p.add_argument("--clear-lines", action="store_true")
     p = sub.add_parser("frame", help="save what the display shows (.bin or .png)")
     p.add_argument("out")
     p = sub.add_parser("topng", help="preview a .bin frame as PNG")
@@ -167,7 +179,7 @@ def main():
         to_png(frame, a.out)
         return
     if not a.host:
-        raise HomeError("Give --host or set EMINI_HOST")
+        raise HomeError("Give --host or set INIFUSS_HOST")
     if a.command == "pair":
         return pair(a.host, a.code)
     token = load_token(a.host)
@@ -195,6 +207,29 @@ def main():
             print("No collections: bins are off, or the device clock is not set yet")
         for e in status["bins_next"]:
             print("%s  %s" % (e["date"], " + ".join(e["bins"])))
+    elif a.command == "push":
+        body = {}
+        if a.clear_battery:
+            body["battery"] = None
+        elif a.battery is not None:
+            body["battery"] = {"percent": a.battery}
+            if a.kwh is not None:
+                body["battery"]["kwh"] = a.kwh
+            if a.ttl is not None:
+                body["battery"]["ttl_min"] = a.ttl
+        if a.clear_lines:
+            body["lines"] = []
+        elif a.line:
+            body["lines"] = []
+            for text in a.line:
+                level, _, rest = text.partition(":")
+                if not rest:
+                    raise HomeError("--line wants LEVEL:TEXT, for example warn:Car not charging")
+                body["lines"].append({"level": level, "text": rest})
+        if not body:
+            raise HomeError("Nothing to push: give --battery, --line, --clear-battery or --clear-lines")
+        reply = request(a.host, "POST", "/api/home", body, token=token)
+        print("Accepted; redraw queued" if reply.get("redraw") else "Accepted")
     elif a.command == "frame":
         frame = request(a.host, "GET", "/api/frame", token=token, raw=True)
         check_frame(frame)

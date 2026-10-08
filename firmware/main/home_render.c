@@ -5,6 +5,7 @@
 #include "home_places.h"
 #include "home_bins.h"
 #include "home_alerts.h"
+#include "home_push.h"
 #include "home_qr.h"
 #include "home_sky.h"
 #include "home_parse.h"
@@ -17,7 +18,7 @@
 
 enum { BLACK = 0, PAPER = 1, YELLOW = 2, RED = 3, W = 400, H = 300 };
 #ifndef HOME_VERSION_TEXT
-#define HOME_VERSION_TEXT "0.6.2"
+#define HOME_VERSION_TEXT "0.7.0"
 #endif
 /* Brushes: the user picks the tone structure in the
  * panel. The line-based screens (engraving, cross-hatch) were dropped after the device test:
@@ -127,7 +128,7 @@ static const phrase_t chinese[] = {
     {"Full moon", "满月"},
     {"Full story in phone panel", "全文见手机面板"},
     {"Full today", "今天满月"},
-    {"Help · emini.ink/home", "帮助 · emini.ink/home"},
+    {"Help · github.com/SathyaBhat/emini-home", "帮助 · github.com/SathyaBhat/emini-home"},
     {"Home reads the clock from the internet, and the sun and the moon appear here as soon as it has one.",
      "Home 从网络获取时间，一旦有了时间，日月就会出现在这里。"},
     {"Home, meet your phone.", "Home，认识一下你的手机。"},
@@ -558,7 +559,7 @@ static void txt(canvas_t *c, int x, int y, int w, int h, int fi, const char *s)
 }
 static void top(canvas_t *c, const home_config_t *cfg, const char *section)
 {
-    text(c, 14, 7, 192, 20, 1, BLACK, cfg->name[0] ? cfg->name : "emini HOME", sizeof cfg->name);
+    text(c, 14, 7, 192, 20, 1, BLACK, cfg->name[0] ? cfg->name : "INIFUSS", sizeof cfg->name);
     int tw = width(0, section, 96);
     txt(c, imax(212, 386 - tw), 9, 174, 17, 0, section);
     rect(c, 14, 31, 372, 1, BLACK);
@@ -685,7 +686,7 @@ static void empty(canvas_t *c, const home_config_t *cfg, home_screen_t screen,
     txt(c, 14, 269, 372, 22, 1,
         st == HOME_ERROR ? tr(lang, "Cannot load data · check the phone panel",
                               "Nie można pobrać danych · sprawdź panel")
-                         : "emini.ink/home");
+                         : "github.com/SathyaBhat/emini-home");
 }
 static const char *condition(const home_weather_t *w, int lang)
 {
@@ -1283,24 +1284,26 @@ static void note(canvas_t *c, const home_config_t *cfg, int64_t now)
     }
     rect(c, 14, 267, 372, 1, BLACK);
     txt(c, 14, 277, 220, 19, 0, tr(lang, "Yours to keep in view.", "Warto mieć to na widoku."));
-    txt(c, 270, 277, 116, 19, 0, "emini.ink/home");
+    txt(c, 270, 277, 116, 19, 0, "Inifuss");
     (void)now;
 }
 /* Card for a screen index outside weather/feed/note: the device name like every
- * other screen ("emini HOME" without one), a title, one line of help. */
+ * other screen ("INIFUSS" without one), a title, one line of help. */
 
 static void status(canvas_t *c, const char *name, size_t cap, const char *title, const char *body)
 {
     if (name && bounded(name, cap))
         text(c, 14, 8, 372, 22, 1, BLACK, name, cap);
     else
-        txt(c, 14, 8, 372, 22, 1, "emini HOME");
+        txt(c, 14, 8, 372, 22, 1, "INIFUSS");
     rect(c, 14, 35, 372, 1, BLACK);
     text(c, 14, 54, 372, 100, 3, BLACK, title ? title : "Home", 256);
     text(c, 14, 163, 372, 80, 1, BLACK, body ? body : "", 512);
     signature(c, title ? title : "Home", 256, HOME_PRINT, 251, 270, NULL);
     /* The panel is local; the web address is where help lives. */
-    txt(c, 14, 279, 372, 18, 0, tr(c->lang, "Help · emini.ink/home", "Pomoc · emini.ink/home"));
+    txt(c, 14, 279, 372, 18, 0,
+        tr(c->lang, "Help · github.com/SathyaBhat/emini-home",
+           "Pomoc · github.com/SathyaBhat/emini-home"));
 }
 /* ---- Kept from the Sky screen for the sunrise and sunset line on Today. ---- */
 enum { SKY_DAY_S = 86400 };
@@ -1683,14 +1686,53 @@ static void alert_corner(canvas_t *c, const home_config_t *cfg, const home_data_
             rect(c, 264, y, 122, 28, BLACK);
             rect(c, 266, y + 2, 118, 24, PAPER);
         }
-        int tw = width(1, al[i].text, 25);
-        text(c, 264 + imax(4, (122 - tw) / 2), y + 5, 118, 20, 1, ink, al[i].text, 25);
+        int f = fit_font(al[i].text, 114, (int[]){1, 0}, 2), tw = width(f, al[i].text, 25);
+        text(c, 264 + imax(4, (122 - tw) / 2), y + (f ? 5 : 7), 114, 20, f, ink, al[i].text, 25);
     }
     if (more > 0) {
         char m[16];
         snprintf(m, sizeof m, "+%d", more);
         txt(c, 264, 100, 122, 18, 1, m);
     }
+}
+/* The home battery the homeserver pushed: a four-segment gauge, the percent, kWh below. Red under
+ * home_low_pct. Stale: the gauge is only an outline and says how old it is; after a day, a dash.
+ * Never pushed: nothing is drawn. Returns whether anything was. */
+static bool home_battery_block(canvas_t *c, const home_config_t *cfg, const home_home_t *h,
+                               int64_t now)
+{
+    home_push_age_t age = home_push_age(h, HOME_PUSH_BATTERY, cfg, now);
+    if (age == HOME_PUSH_NONE || !time_valid(now))
+        return false;
+    const int x = 236, y = 250;
+    char v[32];
+    rect(c, x, y, 44, 22, BLACK);
+    rect(c, x + 2, y + 2, 40, 18, PAPER);
+    rect(c, x + 44, y + 7, 3, 8, BLACK);
+    if (age == HOME_PUSH_GONE) {
+        txt(c, x + 56, y - 2, 100, 30, 3, "–");
+        return true;
+    }
+    int pct = (int)(h->battery_percent + 0.5f);
+    if (age == HOME_PUSH_FRESH) {
+        int segments = (pct + 12) / 25, ink = h->battery_percent < cfg->home_low_pct ? RED : BLACK;
+        for (int i = 0; i < segments && i < 4; ++i)
+            rect(c, x + 4 + i * 10, y + 4, 8, 14, ink);
+    }
+    snprintf(v, sizeof v, "%d%%", pct);
+    txt(c, x + 56, y - 2, 100, 30, 3, v);
+    if (age == HOME_PUSH_STALE) {
+        int64_t hours = (now - h->battery_at) / 3600;
+        if (hours < 1)
+            snprintf(v, sizeof v, "· %d min ago", (int)((now - h->battery_at) / 60));
+        else
+            snprintf(v, sizeof v, "· %d h ago", (int)hours);
+        txt(c, x, 273, 150, 14, 0, v);
+    } else if (isfinite(h->battery_kwh)) {
+        snprintf(v, sizeof v, h->battery_kwh < 10 ? "%.1f kWh" : "%.0f kWh", h->battery_kwh);
+        txt(c, x, 273, 150, 14, 0, v);
+    }
+    return true;
 }
 static void today(canvas_t *c, const home_config_t *cfg, const home_data_t *data, int64_t now)
 {
@@ -1765,13 +1807,16 @@ static void today(canvas_t *c, const home_config_t *cfg, const home_data_t *data
     else if (have)
         hour_strip(c, cfg, w, now);
     rect(c, 14, 240, 372, 1, BLACK);
+    bool battery = home_push_age(&data->home, HOME_PUSH_BATTERY, cfg, now) != HOME_PUSH_NONE;
     if (reminder && have) { /* the weather takes the band the bins line uses */
         weather_icon(c, 14, 246, 28, home_symbol_code(w->symbol));
         snprintf(buf, sizeof buf, "%s° %.64s", a, condition(w, lang));
-        txt(c, 50, 246, 336, 24, 2, buf);
-        txt(c, 50, 267, 336, 20, 1, rain);
+        txt(c, 50, 246, battery ? 178 : 336, 24, 2, buf);
+        txt(c, 50, 267, battery ? 178 : 336, 20, 1, rain);
     } else if (bins && !reminder)
         bins_line(c, cfg, day, lang, 248);
+    if (battery)
+        home_battery_block(c, cfg, &data->home, now);
     if (known && (have || tom))
         alert_corner(c, cfg, data, now, day, tom != NULL);
     today_footer(c, cfg, w, now);
@@ -1804,7 +1849,7 @@ void home_render(const home_config_t *cfg, const home_data_t *data, home_screen_
                   "Otwórz panel w telefonie i wybierz, co ma pokazywać Home."));
     }
 }
-/* ---- The "emini" card (0.6): what the device knows about itself. One screen you reach with
+/* ---- The "Inifuss" card (0.6): what the device knows about itself. One screen you reach with
  * the button: battery with an estimate the device measured on itself, a few counters, a week of
  * battery, and a code that leads to the site. Colour carries meaning here too: the battery ramp
  * runs paper -> yellow -> red as it empties. */
@@ -1919,12 +1964,12 @@ static void info_footer(canvas_t *c, const home_config_t *cfg, const home_stats_
         long long days = (now - s->first_start) / 86400;
         snprintf(line, sizeof line, tr(lang, "With you for %lld days", "Z Tobą od %lld dni"), days);
     } else
-        snprintf(line, sizeof line, "emini Home");
+        snprintf(line, sizeof line, "Inifuss");
     txt(c, 14, 257, 232, 17, 0, line);
     stamp(a, sizeof a, now, lang, cfg->clock24, cfg->timezone);
     txt(c, 250, 257, 136, 17, 0, a);
-    snprintf(line, sizeof line, "%s · %s · emini.ink/home", HOME_VERSION_TEXT,
-             s->address[0] ? s->address : "home.local");
+    snprintf(line, sizeof line, "%s · %s · github.com/SathyaBhat/emini-home", HOME_VERSION_TEXT,
+             s->address[0] ? s->address : "inifuss.local");
     txt(c, 14, 273, 372, 17, 0, line);
 }
 /* First face: the battery, the wordmark and the QR code. Nothing that needs translating. */
@@ -1948,7 +1993,7 @@ static void info_front(canvas_t *c, const home_config_t *cfg, const home_stats_t
     else
         snprintf(value, sizeof value, "—");
     info_number(c, 200, 96, 88, tr(lang, "DAYS HERE", "DNI TUTAJ"), value);
-    home_qr_paint(c->frame, "https://emini.ink/home", 298, 40, 88, 88, NULL);
+    home_qr_paint(c->frame, "https://github.com/SathyaBhat/emini-home", 298, 40, 88, 88, NULL);
     txt(c, 298, 132, 88, 15, 0, tr(lang, "THE PROJECT", "PROJEKT"));
     wordmark(c, 14, 182, 372, 56);
     info_footer(c, cfg, s, now, lang);
@@ -2062,7 +2107,7 @@ void home_render_setup(const char *ssid, const char *password, const char *code,
             txt(&c, 14, 253, 176, 21, 1, tr(lang, "3  Pairing code", "3  Kod parowania"));
             text(&c, 206, 246, 180, 37, 3, BLACK, code, 7);
             rect(&c, 14, 278, 372, 1, BLACK);
-            txt(&c, 14, 282, 372, 17, 0, "emini.ink/home");
+            txt(&c, 14, 282, 372, 17, 0, "github.com/SathyaBhat/emini-home");
             // QR payload contains the private setup AP password; no token is
             // ever added to the panel URL. Frame access stays parent-private.
             memset(wifi_payload, 0, sizeof(wifi_payload));
@@ -2088,7 +2133,7 @@ void home_render_setup(const char *ssid, const char *password, const char *code,
     txt(&c, 14, 237, 160, 20, 1, tr(lang, "3  Pairing code", "3  Kod parowania"));
     text(&c, 202, 230, 184, 37, 3, BLACK, code ? code : "", 32);
     rect(&c, 14, 273, 372, 1, BLACK);
-    txt(&c, 14, 279, 372, 18, 0, "emini.ink/home");
+    txt(&c, 14, 279, 372, 18, 0, "github.com/SathyaBhat/emini-home");
 }
 void home_render_status(const char *title, const char *body, int lang,
                         uint8_t frame[HOME_FRAME_BYTES])

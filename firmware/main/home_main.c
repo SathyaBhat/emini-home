@@ -7,6 +7,7 @@
 #include "home_store.h"
 #include "home_wake.h"
 #include "home_bins.h"
+#include "home_push.h"
 #include "driver/gpio.h"
 #include "esp_timer.h"
 #include "esp_random.h"
@@ -24,6 +25,7 @@
 #include <ctype.h>
 
 home_runtime_t home_runtime;
+#define HOME_PUSH_STORE_US (15LL * 60 * 1000000)
 static SemaphoreHandle_t render_lock;
 static const char *TAG = "home3";
 void home_lock(void)
@@ -50,7 +52,7 @@ bool home_localtime(const home_config_t *c, time_t now, struct tm *out)
 {
     return home_tz_localtime(c->timezone, (int64_t)now, out);
 }
-/* One picture of what the device knows about itself, for the "emini" card. Caller holds the lock;
+/* One picture of what the device knows about itself, for the "Inifuss" card. Caller holds the lock;
  * the estimate comes from the device's own week, so it appears only once there is a real slope. */
 void home_stats_snapshot(home_stats_t *out, int64_t now)
 {
@@ -220,7 +222,7 @@ static void refresh_action(void)
     home_unlock();
     ESP_LOGI(TAG, "Physical hold-and-release: refresh requested");
 }
-/* Which face of the "emini" card is on screen, and whether the card has already been drawn. The
+/* Which face of the "Inifuss" card is on screen, and whether the card has already been drawn. The
  * button needs both, and so does the loop: a press asks for another picture, and the loop must
  * know that the card is never redrawn on its own initiative. */
 static int info_face;
@@ -259,7 +261,7 @@ static void action(int key)
                 home_runtime.manual_until = now;
                 pause = false;
             }
-        } else { /* the "emini" card: front, then the numbers, then away */
+        } else { /* the "Inifuss" card: front, then the numbers, then away */
             if (home_runtime.info_until > now && info_face + 1 < HOME_INFO_FACES) {
                 info_face++;
                 home_runtime.info_until = now + INT64_C(120000000);
@@ -574,7 +576,7 @@ void home_loop_step(void)
         home_runtime.dirty = true;
         home_runtime.request_id++;
     }
-    /* The "emini" card holds the display for its window, then the screen comes back. */
+    /* The "Inifuss" card holds the display for its window, then the screen comes back. */
     bool info_open = home_runtime.info_until > mono;
     if (!info_open && home_runtime.info_until) {
         home_runtime.info_until = 0;
@@ -599,7 +601,7 @@ void home_loop_step(void)
     if (valid && now / 60 != loop_last_minute) {
         loop_last_minute = now / 60;
         home_lock();
-        /* Counters for the "emini" card: minutes awake, the first start we know of, and one
+        /* Counters for the "Inifuss" card: minutes awake, the first start we know of, and one
          * battery reading a day. Written to NVS every 30 minutes, so the flash sees little. */
         home_counters_t *n = &home_runtime.counters;
         n->awake_minutes++;
@@ -680,6 +682,15 @@ void home_loop_step(void)
             home_runtime.request_id++;
             dirty = true;
         }
+        /* Pushed values reach RAM at once; flash gets them at most every 15 minutes. */
+        bool push_store = home_runtime.push_store_due &&
+                          (!home_runtime.push_store_at ||
+                           mono - home_runtime.push_store_at >= HOME_PUSH_STORE_US);
+        if (push_store) {
+            home_runtime.push_store_due = false;
+            home_runtime.push_store_at = mono;
+            home_store_data(&home_runtime.data, c);
+        }
         *d = home_runtime.data;
         home_unlock();
         if (now % 3600 < 60)
@@ -693,8 +704,11 @@ void home_loop_step(void)
         if (now >= 1704067200 && home_localtime(c, (time_t)now, &lt)) {
             int32_t day = home_days_from_civil(lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday);
             int minute = lt.tm_hour * 60 + lt.tm_min;
-            key = day * 4 + (c->bin_count && home_bins_reminder(c, day, minute, NULL)) * 2 +
-                  (minute >= c->evening_minute);
+            /* A pushed value turns stale or goes by itself, with no new push to say so. */
+            int pushed = home_push_age(&d->home, HOME_PUSH_BATTERY, c, now) * 4 +
+                         home_push_age(&d->home, HOME_PUSH_LINES_SECTION, c, now);
+            key = (day * 4 + (c->bin_count && home_bins_reminder(c, day, minute, NULL)) * 2 +
+                   (minute >= c->evening_minute)) * 16 + pushed;
         }
         if (bins_key >= 0 && key != bins_key)
             dirty = true;
@@ -865,7 +879,7 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(
         home_store_init(&home_runtime.config, &home_runtime.data, &home_runtime.secrets));
-    /* Counters for the "emini" card. A missing or foreign record simply starts them at zero. */
+    /* Counters for the "Inifuss" card. A missing or foreign record simply starts them at zero. */
     memset(&home_runtime.counters, 0, sizeof(home_runtime.counters));
     for (int k = 0; k < HOME_BATTERY_DAYS; ++k)
         home_runtime.counters.battery_day[k] = -1;
@@ -889,7 +903,7 @@ void app_main(void)
         ESP_ERROR_CHECK(home_store_secrets(&home_runtime.secrets));
     }
     /* Public AP branding is separate from the persisted per-unit mDNS identity. */
-    strcpy(home_runtime.ssid, "emini.ink");
+    strcpy(home_runtime.ssid, "Inifuss");
     strcpy(home_runtime.address, "192.168.4.1");
     home_runtime.displayed_screen = -1;
     home_runtime.pending_screen = home_runtime.config.fixed_screen;
@@ -923,13 +937,10 @@ void app_main(void)
     if (home_power_init() != ESP_OK)
         ESP_LOGW(TAG, "Running without power management");
     ESP_ERROR_CHECK(home_network_start());
-    esp_err_t discovery = home_discovery_start(home_runtime.secrets.ap_ssid);
+    char registered[33];
+    esp_err_t discovery = home_discovery_start(home_runtime.secrets.ap_ssid, registered);
     if (discovery == ESP_OK) {
-        char base[33];
-        snprintf(base, sizeof(base), "%s", home_runtime.secrets.ap_ssid);
-        for (size_t i = 0; base[i]; ++i)
-            base[i] = (char)tolower((unsigned char)base[i]);
-        snprintf(home_runtime.hostname, sizeof(home_runtime.hostname), "%s.local", base);
+        snprintf(home_runtime.hostname, sizeof(home_runtime.hostname), "%s.local", registered);
     } else {
         ESP_LOGW(TAG, "mDNS unavailable; numeric IP remains available");
     }
@@ -945,7 +956,7 @@ void app_main(void)
         ESP_LOGE(TAG, "Task creation failed");
         abort();
     }
-    ESP_LOGI(TAG, "BOOT emini_home_g3 %s; local panel active; stock NVS untouched",
+    ESP_LOGI(TAG, "BOOT inifuss %s; local panel active; stock NVS untouched",
              esp_app_get_description()->version);
     home_loop_begin(c, d, work);
     while (true) {

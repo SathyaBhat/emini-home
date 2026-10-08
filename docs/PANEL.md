@@ -1,6 +1,6 @@
-# Set up emini Home from your phone
+# Set up Inifuss from your phone
 
-emini Home has no app. The NOTE4C serves its own settings page, and your phone
+Inifuss has no app. The NOTE4C serves its own settings page, and your phone
 opens it in the browser. Your settings are saved on the device; the browser
 keeps only its access token and the panel's own language and theme.
 
@@ -16,7 +16,7 @@ On first start, the display shows **Connect your phone** with two QR codes.
 Once the current picture has finished drawing, you can also open the setup
 window by holding **OK / BOOT for 2 seconds**. It stays open for 5 minutes.
 
-1. Scan the first QR code, or join the Wi-Fi network **emini.ink** with the
+1. Scan the first QR code, or join the Wi-Fi network **Inifuss** with the
    password printed on the display.
 2. Scan the second QR code, or open `http://192.168.4.1`. Joining the network
    does not open the page by itself.
@@ -29,11 +29,11 @@ window by holding **OK / BOOT for 2 seconds**. It stays open for 5 minutes.
    on. If all four connections are taken and you no longer have one of those
    browsers, see [starting over](INSTALL.md#starting-over).
 
-**Where the panel lives afterwards.** The **emini.ink** network and
+**Where the panel lives afterwards.** The **Inifuss** network and
 `http://192.168.4.1` exist only while the setup window is open, for 5 minutes.
 Once Home is on your home Wi-Fi, the panel lives at the device's own
 address, shown in **Settings → Your device** and on the **Continue on your home
-network** card: for example `http://192.168.1.23`, or `http://home-1a2b.local`
+network** card: for example `http://192.168.1.23`, or `http://inifuss.local`
 on phones that resolve `.local` names. Bookmark it. In **Breath**, the default power
 mode, Wi-Fi sleeps between downloads: press the round OK button on the device once,
 wait a few seconds, and the panel answers for five minutes (see
@@ -62,34 +62,29 @@ to open a new one.
 
 The **On your Home** section shows the last picture the display confirmed, pixel
 for pixel, with its status and the battery. Below it, **Your screens** lists the
-five kinds of information:
+three kinds of information:
 
 | Screen | What it shows |
 | --- | --- |
-| Weather | The forecast from MET Norway for the place you set |
-| News | One headline from a public RSS or Atom feed: the first item for BBC World (the default), the newest entry for other HTTPS feeds |
+| Today | The date, the weather now, the next hours (tomorrow and the next days from the evening time), the next bin collections, an alerts corner and any home battery pushed to the device |
+| Weather | The forecast from the Australian Bureau of Meteorology for the place you set |
 | Your note | A few words of your own |
-| Sky | Sunrise, sunset and the moon, worked out on the device from the place you set; nothing is downloaded |
-| Air | Air quality, UV and pollen from Open-Meteo for the place you set |
 
-Sky and Air start switched off. Turn a screen on, or off, under **In your
-collection** on its page. A screen that is switched off downloads nothing; since
-0.6.2 that holds for Weather and News as well as Air. Out of the box the display
-shows only Weather, but News is in the collection too, so its feed is still
-asked about twice an hour: untick **Include this screen** on the News page if
-you do not want that.
+Turn a screen on, or off, under **In your collection** on its page. A screen that
+is switched off downloads nothing; if neither Today nor Weather is on, no weather is
+fetched. On the Today page you also set the evening time, the bin schedule and window,
+and the alert limits (rain over 12 hours, rain in one hour, wind).
 
 Tap a screen to open its page:
 
 - **Preview of saved settings**: a 1:1 view of the picture. It updates when new
-  information arrives. Until Home has downloaded the forecast or the feed,
+  information arrives. Until Home has downloaded the forecast,
   every composition shows the same placeholder.
-- **Source & updates** (Weather, News and Air): when the information was issued,
+- **Source & updates** (Today and Weather): when the information was issued,
   downloaded and last checked, and the time after which Home checks again.
   **Check for updates** asks the source again at once, if the screen is
   switched on; if it has nothing newer, the picture stays as it is.
-- **What it says**: for Weather, the place (see below). For News, the feed
-  address. For your note, the words.
+- **What it says**: for Weather, the place (see below). For your note, the words.
 - **How it looks**: the **Composition** and a link to the texture, colour and
   text size.
 - **In your collection**: include the screen in the rotation and change its
@@ -116,26 +111,6 @@ on your home Wi-Fi, and not on the setup network. Place search by
 **Use my location** estimates an area from the device's internet address
 instead. The estimate can land on your internet provider's city, and it does
 not replace a town you picked in the search.
-
-### The Sky screen
-
-Sky asks nothing of the internet: the device works out sunrise, sunset, the
-length of the day and the phase of the moon from the place you set and from its
-own clock. Nothing is downloaded for this screen, so it keeps working when the
-network does not.
-
-<p align="center"><img src="images/panel-sky.webp" width="260" alt="The Sky screen page in the panel: a preview and the note that everything is computed on the device"></p>
-
-### The Air screen
-
-Air shows the European air quality index, PM2.5 for the next 24 hours, the UV
-index with a sunscreen hint and, in Europe, four pollens, from Open-Meteo's
-Air Quality service. On its page you choose the headline number: the European
-index, the US AQI or PM2.5. Home asks Open-Meteo only while this screen is
-switched on, about once an hour, and sends it the saved coordinates and
-nothing else.
-
-<p align="center"><img src="images/panel-air.webp" width="260" alt="The Air screen page in the panel: the Open-Meteo source line and the choice of the headline number"></p>
 
 ### Compositions
 
@@ -194,7 +169,7 @@ panel itself, and the moon or sun button switches it between light and dark.
 
 **Download your recipe** saves your compositions, appearance, screen order,
 language, units, clock format and rhythm, including quiet hours, as a small
-file. It leaves out your location, time zone, note, feed address and
+file. It leaves out your location, time zone, note, bins, alert limits and
 connection details. Someone else can import it with **Bring a recipe home**.
 You can also download a public sample picture, or choose to download the
 picture on your own display. Check that one for personal words or your place
@@ -211,7 +186,7 @@ Home has two power modes, chosen under **Settings → Battery → Power** and sa
   lets it sleep again. While it sleeps the panel cannot reach the device: a panel you
   already have open says **Home is resting**, and a new page does not load. A short press
   on the round **OK / BOOT** button opens the panel for five minutes, a few seconds after
-  the press; the emini card that appears says so in its footer: **Panel open for 5
+  the press; the Inifuss card that appears says so in its footer: **Panel open for 5
   minutes**. The five minutes start again whenever you ask Home for something in the
   panel, such as opening it, a preview, a save or a Wi-Fi scan; what the panel checks by
   itself, a town search and a tab left open do not keep Home awake. The panel counts the time down under the battery
@@ -228,7 +203,7 @@ for 2 seconds to open the setup window and pair.
 ## Good to know
 
 - On the device, **Up** and **Down** switch between screens. A short press on
-  **OK / BOOT** shows the **emini card** for two minutes, and in Breath it also opens
+  **OK / BOOT** shows the **Inifuss card** for two minutes, and in Breath it also opens
   the panel for five. Since 0.6.0 the card has
   **two faces**, and each press moves to the next one: first the battery with an
   estimate of how long the charge lasts, the number of pictures drawn and a QR code

@@ -1,7 +1,7 @@
 # Getting help
 
-emini Home is an independent community project, maintained in spare time.
-Questions go to [GitHub Issues](https://github.com/fiedoruk/emini-home/issues),
+Inifuss is an independent community project, maintained in spare time.
+Questions go to [GitHub Issues](https://github.com/SathyaBhat/emini-home/issues),
 and help is best effort.
 
 Before opening an issue, check the [installation guide](docs/INSTALL.md) and
@@ -53,7 +53,7 @@ version you updated from.
 between downloads: press the round OK button once, wait a few seconds, then reload
 the page; the panel answers for five minutes. If it still does not open, wait until the display has finished drawing, then
 hold OK / BOOT for 2 seconds to open the setup window for 5 minutes. Join the
-**emini.ink** Wi-Fi shown on the display and open `http://192.168.4.1`.
+**Inifuss** Wi-Fi shown on the display and open `http://192.168.4.1`.
 Joining the network does not open the page by itself.
 
 **The installer or esptool does not see the NOTE4C.** Since 0.6.0 Home sleeps

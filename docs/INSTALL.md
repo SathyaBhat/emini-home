@@ -1,10 +1,10 @@
-# Install emini Home
+# Install Inifuss
 
 > A web installer at [esp32ai.me/install](https://esp32ai.me/install?fw=emini-home) can write the same
 > files from Chrome or Edge, with the file or a link to it. This guide is the careful
 > route: two full backups and a preflight check before anything is written.
 
-This guide installs emini Home 0.6.2 on a **ZECTRIX NOTE4C Devkit** from a
+This guide installs Inifuss 0.6.2 on a **ZECTRIX NOTE4C Devkit** from a
 computer, using Espressif's `esptool`. Most of the time goes into two full
 backups of the 16 MiB flash.
 
@@ -50,7 +50,7 @@ Only two areas of the 16 MiB flash are written.
 | Address | Size | Before | After |
 | --- | --- | --- | --- |
 | `0x8000` | 3 KiB | factory partition table | same table plus one 64 KiB settings area, `home_nvs` at `0x10000` |
-| `0x20000` | about 3.6 MiB of the 4,032 KiB application slot | factory application | emini Home |
+| `0x20000` | about 3.6 MiB of the 4,032 KiB application slot | factory application | Inifuss |
 
 The bootloader (`0x0`), factory NVS (`0x9000`), boot selection data
 (`0xD000`), PHY data (`0xF000`), the second application slot (`0x410000`)
@@ -79,7 +79,7 @@ each result with its line in `SHA256SUMS`.
 Connect only the NOTE4C and unplug any other ESP32 board. Close anything else
 that talks to serial ports (Arduino IDE, a serial monitor, another flashing
 tool). Since 0.6.0 Home sleeps between events on battery, and its USB port
-sleeps with it, so the computer may not see the device at all. If emini Home is
+sleeps with it, so the computer may not see the device at all. If Inifuss is
 already installed, first hold the round OK button for 2 seconds until the setup
 screen appears: while that window is open Home stays awake. Then plug the cable
 in, or unplug it and plug it in again. The NOTE4C shows up as a USB JTAG/serial
@@ -96,7 +96,7 @@ changes, stop.
 
 ## 3. Confirm the chip is not locked
 
-If emini Home is already installed, first wait until the display has stopped
+If Inifuss is already installed, first wait until the display has stopped
 changing.
 
 ```sh
@@ -140,8 +140,8 @@ python3 path/to/emini-home-0.6.2/tools/preflight.py note4c-backup-a.bin note4c-b
 The check reads the two backups, confirms they are identical and compares the
 bootloader, boot selection data, partition table and the future settings area
 with the NOTE4C this release was tested on. It also checks that the partition
-table file is the emini Home table and that the application file is an emini
-Home image for the ESP32-S3, and prints the version stored in that image: the
+table file is the Inifuss table and that the application file is an Inifuss
+image for the ESP32-S3, and prints the version stored in that image: the
 `Application file` line must say `0.6.2`. After `READY` it names the two files
 for step 6. It never connects to the device, and it cannot tell a monochrome
 NOTE4 from a NOTE4C, so continue only if your device has the four-colour
@@ -150,8 +150,8 @@ identifies them.
 
 - `READY: first installation.` Continue with step 6. Your two backups hold the
   factory firmware, so keep them.
-- `READY: update or reinstall.` emini Home is already installed, and step 6
-  keeps your Home settings. Your two new backups hold emini Home; the factory
+- `READY: update or reinstall.` Inifuss is already installed, and step 6
+  keeps your Home settings. Your two new backups hold Inifuss; the factory
   backup is the one from your first installation.
 - A line that starts with `ERROR:` means the check could not read a file.
   Check that the four release files are in this folder and that the path to
@@ -163,13 +163,13 @@ identifies them.
   your first installation is the only copy of the factory firmware. If you have not written anything yet, your NOTE4C is not broken; it
   just differs from the tested unit. Do not erase anything to make the check
   pass. Run the command from step 8 to start your firmware again, and you can
-  [open an issue](https://github.com/fiedoruk/emini-home/issues/new/choose)
+  [open an issue](https://github.com/SathyaBhat/emini-home/issues/new/choose)
   with the message (not the backup).
 
 If a write in step 6 was interrupted, follow *Writing stopped halfway* under
 [If something goes wrong](#if-something-goes-wrong) instead of this step.
 
-## 6. Write emini Home
+## 6. Write Inifuss
 
 Continue only if step 5 printed `READY` for the backups you have just made.
 First confirm that the NOTE4C still holds exactly that backup:
@@ -190,7 +190,7 @@ esptool --chip esp32s3 -p PORT -b 460800 --after no-reset write-flash --flash-mo
 It only has an effect on a file written at `0x0`, as when you go back to the
 factory firmware. Keep the cable connected until the command finishes.
 
-Every emini Home release so far has used the same partition table, so on a
+Every Inifuss release so far has used the same partition table, so on a
 device that already runs Home the table write changes nothing. That is why the
 release notes describe an update as the application at `0x20000` alone; this
 guide writes both files so that one sequence serves a first installation and an
@@ -206,7 +206,7 @@ Both regions must report that the digest matched. If one does not, do not
 start the device yet. Follow *Writing stopped halfway* under
 [If something goes wrong](#if-something-goes-wrong).
 
-## 8. Start emini Home
+## 8. Start Inifuss
 
 ```sh
 esptool --chip esp32s3 -p PORT run
@@ -251,7 +251,7 @@ This clears Home's settings, Wi-Fi details and paired browsers by erasing only
 the 64 KiB settings area. We ran these commands on our test unit: the settings
 area read back empty, and Home opened the setup screen.
 
-Use it only on a NOTE4C that runs emini Home. First make new backups and run
+Use it only on a NOTE4C that runs Inifuss. First make new backups and run
 the check (steps 1 to 5, in a new folder with the four release files), and
 continue only if it printed `READY: update or reinstall.` On any other device
 this area can hold factory data. Copy the command instead of typing it: a

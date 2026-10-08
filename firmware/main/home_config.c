@@ -118,6 +118,8 @@ void home_config_defaults(home_config_t *c)
     c->rain_sum_x10 = 100;
     c->rain_hour_x10 = 40;
     c->wind_kmh = 36;
+    c->home_low_pct = 20;
+    c->home_stale_min = 180;
     c->evening_minute = 1080;
 }
 static bool unique(const cJSON *n, int depth)
@@ -189,7 +191,7 @@ static bool boolean(const cJSON *j, const char *k, bool *out)
     return true;
 }
 /* Short OK/BOOT press: what it does (index = home_config_t.ok_action). Since 0.6 the default is
- * the "emini" card; the language moved to the phone panel alone, and a record that still asks for
+ * the "Inifuss" card; the language moved to the phone panel alone, and a record that still asks for
  * the old language action is read as the card. */
 static const char *const ok_actions[] = {"info", "refresh", "hold", "setup"};
 /* Brush: tone structure of the large fields (index = home_config_t.brush).
@@ -332,9 +334,9 @@ bool home_config_decode(const char *text, size_t len, home_config_t *out, const 
         if (get(j, "alerts")) { /* optional since 0.7; a household fact, not a recipe key */
             cJSON *al = get(j, "alerts");
             /* "air" went with the Open-Meteo air quality fetch; a record from this branch has it. */
-            static const char *const akeys[] = {"air", "rain_mm", "rain_mm_h", "wind_kmh"};
+            static const char *const akeys[] = {"air", "rain_mm", "rain_mm_h", "wind_kmh", "low_pct", "stale_min"};
             double mm;
-            REQUIRE(known(al, akeys, 4) && (!get(al, "air") || cJSON_IsBool(get(al, "air"))),
+            REQUIRE(known(al, akeys, 6) && (!get(al, "air") || cJSON_IsBool(get(al, "air"))),
                     "Invalid alerts");
             if (get(al, "rain_mm")) {
                 REQUIRE(number(al, "rain_mm", 0, 500, &mm), "Invalid rain alert");
@@ -347,6 +349,14 @@ bool home_config_decode(const char *text, size_t len, home_config_t *out, const 
             if (get(al, "wind_kmh")) {
                 REQUIRE(integer(al, "wind_kmh", 0, 300, &n), "Invalid wind alert");
                 c.wind_kmh = (uint16_t)n;
+            }
+            if (get(al, "low_pct")) {
+                REQUIRE(integer(al, "low_pct", 0, 100, &n), "Invalid battery limit");
+                c.home_low_pct = (uint8_t)n;
+            }
+            if (get(al, "stale_min")) {
+                REQUIRE(integer(al, "stale_min", 1, 1440, &n), "Invalid stale time");
+                c.home_stale_min = (uint16_t)n;
             }
         }
         if (get(j, "evening")) /* optional since 0.7; a household fact, not a recipe key */
@@ -598,6 +608,8 @@ cJSON *home_config_json(const home_config_t *c, bool recipe)
         JSON_NEED(cJSON_AddNumberToObject(alerts, "rain_mm", c->rain_sum_x10 / 10.0));
         JSON_NEED(cJSON_AddNumberToObject(alerts, "rain_mm_h", c->rain_hour_x10 / 10.0));
         JSON_NEED(cJSON_AddNumberToObject(alerts, "wind_kmh", c->wind_kmh));
+        JSON_NEED(cJSON_AddNumberToObject(alerts, "low_pct", c->home_low_pct));
+        JSON_NEED(cJSON_AddNumberToObject(alerts, "stale_min", c->home_stale_min));
         addhm(j, "evening", c->evening_minute);
         JSON_NEED(get(j, "evening"));
         cJSON *bins = cJSON_AddObjectToObject(j, "bins");

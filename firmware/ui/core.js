@@ -1,4 +1,4 @@
-/* emini Home pure helpers and optional local startup guard. No network calls. */
+/* Inifuss pure helpers and optional local startup guard. No network calls. */
 (function (root) {
   "use strict";
   function createBootGuard(host) {

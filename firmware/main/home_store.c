@@ -1,9 +1,11 @@
 #include "home_store.h"
 #include "home_config.h"
+#include "home_push.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "esp_crc.h"
 #include "esp_log.h"
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -110,6 +112,7 @@ esp_err_t home_store_init(home_config_t *c, home_data_t *d, home_secrets_t *s)
         return e;
     home_config_defaults(c);
     memset(d, 0, sizeof(*d));
+    d->home.battery_percent = d->home.battery_kwh = NAN;
     memset(s, 0, sizeof(*s));
     size_t size;
     void *p = get_record(0, &size, &e);
@@ -137,6 +140,8 @@ esp_err_t home_store_init(home_config_t *c, home_data_t *d, home_secrets_t *s)
         if (size == sizeof(cache_t)) {
             cache_t *cache = p;
             cache->timezone[sizeof cache->timezone - 1] = 0;
+            d->home = cache->data.home; /* the homeserver's values do not depend on the place */
+            home_push_sanitise(&d->home);
             if (cache->latitude == c->latitude && cache->longitude == c->longitude &&
                 !strcmp(cache->timezone, c->timezone)) {
                 d->weather = cache->data.weather;
@@ -199,7 +204,7 @@ esp_err_t home_store_secrets(const home_secrets_t *s)
 {
     return put(2, s, sizeof(*s));
 }
-/* Counters for the "emini" card. A record from another firmware has another size and is
+/* Counters for the "Inifuss" card. A record from another firmware has another size and is
  * skipped, so the counters start from zero rather than from a field at the wrong offset. */
 esp_err_t home_store_stats(const home_counters_t *n)
 {

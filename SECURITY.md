@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report security problems privately through GitHub:
-**Security → [Report a vulnerability](https://github.com/fiedoruk/emini-home/security/advisories/new)**.
+**Security → [Report a vulnerability](https://github.com/SathyaBhat/emini-home/security/advisories/new)**.
 Do not open a public issue for them.
 
 A good report names the firmware version, what you did and what happened.
@@ -26,7 +26,7 @@ installation: it is your only copy of this unit's factory firmware and data.
 
 ## Security model
 
-emini Home is built for a home network you trust and for a device you keep in
+Inifuss is built for a home network you trust and for a device you keep in
 your own home. This release has not had an independent security audit. The
 following limits are known in this release:
 

@@ -1,21 +1,21 @@
-# emini Home
+# Inifuss
 
 **A calm, four-colour poster of your day for the ZECTRIX NOTE4C e-paper devkit.**
 
-`0.6.2` · [emini.ink](https://emini.ink/home/) · tested on one NOTE4C · ESP-IDF v6.0 · MIT
+`0.7.0` · a fork of [emini Home](https://github.com/fiedoruk/emini-home) · tested on one NOTE4C · ESP-IDF v6.0 · MIT
 
 <p align="center">
-  <img src="docs/images/note4c-photo.webp" width="720" alt="A ZECTRIX NOTE4C on a fridge door running emini Home 0.5.1. The Weather screen in the Print composition shows 15° in Czaplinek, 12–17 °C over 24 hours, cloud cover, a dithered band of the next hours, and the line Dry until 06:00 · Wind 3.4 m/s.">
+  <img src="docs/images/note4c-photo.webp" width="720" alt="A ZECTRIX NOTE4C on a fridge door running Inifuss 0.5.1. The Weather screen in the Print composition shows 15° in Czaplinek, 12–17 °C over 24 hours, cloud cover, a dithered band of the next hours, and the line Dry until 06:00 · Wind 3.4 m/s.">
 </p>
 <p align="center"><sub>Photo of a NOTE4C running 0.5.1 · Weather in the Print composition</sub></p>
 
-emini Home puts the weather forecast, one headline, a note in your own words,
-the sky above you and the air you breathe on the NOTE4C's 400 × 300 display, using its black, white, red and
+Inifuss puts today's weather, the bins, a note in your own words and a few
+values from your home on the NOTE4C's 400 × 300 display, using its black, white, red and
 yellow pigments. You set it up in your phone's browser, without an app or an
-account. After that the device does the rest on its own, and no emini.ink
-server sits in between.
+account. After that the device does the rest on its own, and no server of ours
+sits in between.
 
-[Install](docs/INSTALL.md) · [Phone panel](docs/PANEL.md) · [Release 0.6.2](https://github.com/fiedoruk/emini-home/releases/tag/v0.6.2) · [Website](https://emini.ink/home/) · [Hardware report](https://github.com/fiedoruk/emini-home/issues/new?template=hardware-report.yml)
+[Install](docs/INSTALL.md) · [Phone panel](docs/PANEL.md) · [Upstream release 0.6.2](https://github.com/fiedoruk/emini-home/releases/tag/v0.6.2) · [Hardware report](https://github.com/SathyaBhat/emini-home/issues/new?template=hardware-report.yml)
 
 > [!WARNING]
 > Version 0.6.2 has been installed and tested on one NOTE4C. Read the
@@ -43,20 +43,19 @@ ordered dither patterns to draw warmth, light and cloud. Coloured patterns are
 never finer than 2 pixels, while black and paper patterns can still use single
 pixels.
 
-## Sky and Air
+## Today, bins and the home battery
 
-Two more screens arrived in 0.5.0, both switched off until you enable them in the panel.
-**Sky** shows sunrise, sunset, the length of the day and the Moon's phase, worked out on the
-device from your saved location; nothing is downloaded for it. **Air** shows the European
-air quality index, PM2.5 over the next 24 hours, the UV index with a sunscreen hint and,
-in Europe, four pollens, from Open-Meteo's Air Quality service (CC BY 4.0). Each has the
-same three compositions as the weather.
+Version 0.7 adds **Today**, the first screen: the date, the weather now, when it rains, the next
+six hours, and from 18:00 tomorrow and the days after it. A small **alerts corner** at the top
+right stays blank on a calm day and shows up to three chips when rain, wind or UV pass your
+limits, the weather is old, or the home battery is low. Bin collections are a line at the
+bottom ("Next bins: Tue 13"), and on the evening before a collection the bins take the whole
+upper half for a window you choose.
 
-<p align="center">
-  <img src="docs/images/epaper-sky-print.png" width="400" alt="The Sky screen in the Print composition: the sunset time in large type, the length of the day, a warm dome with the sun in its current position and a strip of the whole day from night through dawn, day and dusk">
-  <img src="docs/images/epaper-air-print.png" width="400" alt="The Air screen in the Print composition: the European air quality index in large type, the word Good, 24 hourly bars on a warm scale, a UV sun, the UV line and four pollen tiles">
-</p>
-<p align="center"><sub>Sky (Warsaw, equinox) and Air (Berlin, May), drawn from sample data by the 0.5.0 renderer</sub></p>
+A computer on your network can push a few values to the device (`POST /api/home`, or
+`tools/home_cli.py push`): a home battery's charge, and up to three short warning lines. They show
+at the bottom of Today and in the alerts corner, go stale after a time you give, and disappear
+after a day. See [pushing values](docs/PUSH.md). News, Sky and Air screens, and pairing, are gone.
 
 ## Your brush
 
@@ -66,29 +65,24 @@ the default), halftone dots, or the ordered grid of the earlier versions. The re
 cards before 0.5.0; yellow needs two pixels to exist at all, so no brush ever draws
 it finer.
 
-## One headline and your note
+## Your note
 
 <p align="center">
-  <img src="docs/images/epaper-news-print.png" width="400" alt="The News screen: one headline from a news feed">
   <img src="docs/images/epaper-note-rhythm.png" width="400" alt="The Your note screen: a personal note in large type above a dithered band">
 </p>
-<p align="center"><sub>News and Your note, drawn from sample data</sub></p>
+<p align="center"><sub>Your note, drawn from sample data</sub></p>
 
-News comes from BBC World by default, or from a public RSS or Atom feed of your
-choice, as long as it is served over HTTPS. The note is yours: a reminder, a
-line from a friend, a few words to keep in view.
+The note is yours: a reminder, a line from a friend, a few words to keep in view.
 
-Headlines and notes in Simplified Chinese are drawn with Noto Sans CJK glyphs
-(the whole of GB 2312, 6 763 characters, plus punctuation); lines break between
-characters, so a Chinese feed such as a news site's RSS works as it is. Since
-0.5.1 the screens themselves speak Simplified Chinese too: every label, footer
-and sentence, the date as 9月15日, and air quality, UV and pollen by name.
+Notes in Simplified Chinese are drawn with Noto Sans CJK glyphs (the whole of GB 2312,
+6 763 characters, plus punctuation); lines break between characters. Most of the screens speak
+Simplified Chinese too; the Today screen still falls back to English for some labels.
 Choose the language in the phone panel, or hold the lower side button for five
 seconds on the device.
 
 ## Set it up from your phone
 
-On first start the display shows a setup screen. Join the **emini.ink** Wi-Fi
+On first start the display shows a setup screen. Join the **Inifuss** Wi-Fi
 network it shows, open `http://192.168.4.1`, type the pairing code from the
 display, and move the device onto your home network. From then on the panel
 lives at the device's own address on that network (Settings → Your device);
@@ -112,7 +106,7 @@ The [phone panel guide](docs/PANEL.md) walks through every step.
 Since 0.6.0 Home has two power modes, chosen in the panel under Settings → Battery.
 
 - **Breath**, the default, turns Wi-Fi off between downloads. About twice an hour Home
-  switches the radio on, fetches the weather and the news, and lets it sleep again: overnight
+  switches the radio on, fetches the weather, and lets it sleep again: overnight
   on the tested unit the radio was on for 15 to 55 seconds an hour. While it sleeps the phone
   panel cannot reach the device. Press the round OK button, wait a few seconds, and the
   panel opens for five minutes. The five minutes start again whenever you ask Home for
@@ -142,7 +136,7 @@ goes into two full backups. In short:
 3. Write two files from the [0.6.2 release](https://github.com/fiedoruk/emini-home/releases/tag/v0.6.2):
    the partition table at `0x8000` and the application at `0x20000`. The
    bootloader and factory data stay untouched. An update from an earlier
-   emini Home needs only the application: every release so far has used the
+   Inifuss needs only the application: every release so far has used the
    same partition table.
 4. Verify, start and continue on your phone.
 
@@ -150,7 +144,7 @@ goes into two full backups. In short:
 
 Where 0.6.2 stands:
 
-- **0.6 is the final version of emini Home.** 0.6.1 and 0.6.2 are maintenance releases:
+- **0.6 was the final emini Home release; Inifuss continues it as a fork.** 0.6.1 and 0.6.2 are maintenance releases:
   0.6.1 keeps the status LED off, and 0.6.2 fixes what a review of 0.6.1 found (see the
   [release notes](https://github.com/fiedoruk/emini-home/releases/tag/v0.6.2)). The code
   stays here under the MIT licence for anyone to build, change and install; no further feature
@@ -175,26 +169,24 @@ Where 0.6.2 stands:
   to four weeks in Breath and about a week in Open. All three are estimates: a full
   discharge has not been measured.
   On a cable Home never sleeps and behaves exactly as before. The panel shows voltage and
-  a rough percentage, and after a few days on battery the emini card shows its own estimate.
+  a rough percentage, and after a few days on battery the Inifuss card shows its own estimate.
 - **Going back to the factory firmware** uses the standard esptool procedure
   and has not yet been tried on a real unit.
 - **Updates** are installed over USB. There is no over-the-air update mechanism.
 
-If you install it, a [hardware report](https://github.com/fiedoruk/emini-home/issues/new?template=hardware-report.yml)
+If you install it, a [hardware report](https://github.com/SathyaBhat/emini-home/issues/new?template=hardware-report.yml)
 helps the next person decide.
 
 ## Privacy
 
-Home talks to MET Norway for weather, to the news feed you choose, to FreeIPAPI
-for an approximate location and to public time servers. While the Air screen is
-switched on, it also sends the saved coordinates to the Open-Meteo Air Quality
-API for air quality, UV and pollen. Weather, news and air quality are fetched only
-while their screens are switched on. When you search for a town, your phone's
-browser sends the search to Open-Meteo. Each of these services sees an ordinary
-request from your internet address. Nothing goes to emini, and the firmware has
-no analytics. The panel runs over HTTP on your local network and settings are
-stored on the device without encryption, so keep the device on a network and in
-a home you trust. Details: [privacy](docs/PRIVACY.md).
+Home talks to the Australian Bureau of Meteorology for weather (sending a geohash of about 1.2 km,
+not exact coordinates), to FreeIPAPI for an approximate location and to public time servers. The
+weather is fetched only while Today or Weather is switched on. When you search for a town, your
+phone's browser sends the search to Open-Meteo. Each of these services sees an ordinary
+request from your internet address. Nothing goes to the project, and the firmware has
+no analytics. The panel runs over HTTP on your local network without pairing, so anyone on that
+network can change the settings, and settings are stored on the device without encryption: keep
+the device on a network and in a home you trust. Details: [privacy](docs/PRIVACY.md).
 
 ## Build it yourself
 
@@ -210,19 +202,21 @@ direction, made the calls and tested the firmware on a NOTE4C.
 ## Security
 
 Please report vulnerabilities privately through
-[GitHub security advisories](https://github.com/fiedoruk/emini-home/security/advisories/new).
+[GitHub security advisories](https://github.com/SathyaBhat/emini-home/security/advisories/new).
 [SECURITY.md](SECURITY.md) lists the known limits of this release.
 
 ## Credits and licence
 
-emini Home is released under the [MIT License](LICENSE).
+Inifuss is released under the [MIT License](LICENSE). It is a fork of
+[emini Home](https://github.com/fiedoruk/emini-home) by Tomasz Fiedoruk, whose copyright line
+stays in the licence. The name is from the Scroll of Inifuss in Diablo II, a game by Blizzard
+Entertainment; this is an independent, personal, non-commercial project.
 
-- Weather data from [MET Norway](https://api.met.no/), licensed CC BY 4.0.
-- Air quality, UV and pollen from the [Open-Meteo Air Quality API](https://open-meteo.com/en/docs/air-quality-api), licensed CC BY 4.0.
+- Weather and UV from the Australian [Bureau of Meteorology](http://www.bom.gov.au/) forecast service. It is
+  an undocumented API and the Bureau's copyright terms restrict its use: this is for personal use only.
 - Place search by [Open-Meteo.com](https://open-meteo.com/), using location
   data from [GeoNames](https://www.geonames.org/), licensed CC BY 4.0.
 - Approximate location from [FreeIPAPI](https://freeipapi.com/).
-- Headlines belong to their publishers; the default feed is BBC World.
 - Display driver and battery curve adapted from the
   [NOTE4C reference firmware by LazyYoun](https://github.com/LazyYoun/youn-ink-fourcolor-firmware) (MIT).
 - Typeface: [Atkinson Hyperlegible Next](https://github.com/googlefonts/atkinson-hyperlegible-next) (SIL OFL 1.1).
@@ -232,5 +226,5 @@ emini Home is released under the [MIT License](LICENSE).
   licences are listed in [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ZECTRIX and NOTE4C may be trademarks of their owner. The author bought the
-NOTE4C used for development at the retail price. emini Home is an independent
+NOTE4C used for development at the retail price. Inifuss is an independent
 project, not made or sponsored by ZECTRIX.

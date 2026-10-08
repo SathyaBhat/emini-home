@@ -1,4 +1,5 @@
 #include "home_runtime.h"
+#include "home_push.h"
 #include "home_power.h"
 #include "home_panel.h"
 #ifdef HOME_PM_PROFILE
@@ -83,6 +84,22 @@ static bool header(httpd_req_t *r, const char *k, char *out, size_t n)
         return false;
     return httpd_req_get_hdr_value_str(r, k, out, n) == ESP_OK;
 }
+/* A second unit on the network is renamed by the mDNS responder: inifuss.local becomes
+ * inifuss-2.local. The name in hostname is the one registered at start; accept its later numbered
+ * form too, so the panel keeps working under the name the router hands out. */
+static bool renamed_host(const char *name, const char *hostname)
+{
+    const char *dot = strrchr(hostname, '.');
+    size_t base = dot ? (size_t)(dot - hostname) : strlen(hostname);
+    while (base > 0 && hostname[base - 1] >= '0' && hostname[base - 1] <= '9')
+        base--;
+    if (base > 0 && hostname[base - 1] == '-')
+        base--; /* already numbered */
+    if (strncmp(name, hostname, base) ||
+        strcmp(name + base + strspn(name + base, "-0123456789"), ".local"))
+        return false;
+    return name[base] == '-' && name[base + 1] >= '1' && name[base + 1] <= '9';
+}
 static bool origin_ok(httpd_req_t *r)
 {
     char host[96], origin[128], expected[128], ip[32], hostname[40];
@@ -101,7 +118,7 @@ static bool origin_ok(httpd_req_t *r)
     snprintf(hostname, sizeof(hostname), "%s", home_runtime.hostname);
     home_unlock();
     if (strcmp(clean, "192.168.4.1") && strcmp(clean, ip) &&
-        (!hostname[0] || strcmp(clean, hostname)))
+        (!hostname[0] || (strcmp(clean, hostname) && !renamed_host(clean, hostname))))
         return false;
     if (httpd_req_get_hdr_value_len(r, "Origin")) {
         if (!header(r, "Origin", origin, sizeof(origin)))
@@ -263,6 +280,49 @@ static cJSON *power_log_json(void)
     }
     return j;
 }
+#define HOME_PUSH_REDRAW_US (10LL * 60 * 1000000)
+static cJSON *home_values_json(const home_home_t *h, const home_config_t *c, int64_t now)
+{
+    static const char *const names[] = {"warn", "info", "outline"};
+    static const char *const ages[] = {"none", "fresh", "stale", "gone"};
+    cJSON *j = cJSON_CreateObject();
+    cJSON *b = j ? cJSON_AddObjectToObject(j, "battery") : NULL;
+    cJSON *lines = j ? cJSON_AddArrayToObject(j, "lines") : NULL;
+    if (!b || !lines) {
+        cJSON_Delete(j);
+        return NULL;
+    }
+    home_push_age_t ba = home_push_age(h, HOME_PUSH_BATTERY, c, now),
+                    la = home_push_age(h, HOME_PUSH_LINES_SECTION, c, now);
+    bool ok = cJSON_AddStringToObject(b, "age", ages[ba]) &&
+              cJSON_AddNumberToObject(b, "received_at", (double)h->battery_at) &&
+              cJSON_AddBoolToObject(b, "stale", ba == HOME_PUSH_STALE || ba == HOME_PUSH_GONE) &&
+              (ba != HOME_PUSH_NONE && isfinite(h->battery_percent)
+                   ? cJSON_AddNumberToObject(b, "percent", h->battery_percent)
+                   : cJSON_AddNullToObject(b, "percent")) &&
+              (ba != HOME_PUSH_NONE && isfinite(h->battery_kwh)
+                   ? cJSON_AddNumberToObject(b, "kwh", h->battery_kwh)
+                   : cJSON_AddNullToObject(b, "kwh")) &&
+              cJSON_AddNumberToObject(b, "ttl_min",
+                                      h->battery_ttl_min ? h->battery_ttl_min : c->home_stale_min) &&
+              cJSON_AddStringToObject(j, "lines_age", ages[la]) &&
+              cJSON_AddNumberToObject(j, "lines_received_at", (double)h->lines_at) &&
+              cJSON_AddBoolToObject(j, "lines_stale", la == HOME_PUSH_STALE || la == HOME_PUSH_GONE);
+    for (int i = 0; ok && la != HOME_PUSH_NONE && i < h->line_count; ++i) {
+        cJSON *l = cJSON_CreateObject();
+        if (!l || !cJSON_AddStringToObject(l, "level", names[h->line[i].level]) ||
+            !cJSON_AddStringToObject(l, "text", h->line[i].text)) {
+            cJSON_Delete(l);
+            ok = false;
+        } else
+            cJSON_AddItemToArray(lines, l);
+    }
+    if (!ok) {
+        cJSON_Delete(j);
+        return NULL;
+    }
+    return j;
+}
 static esp_err_t status(httpd_req_t *r, int token)
 {
     cJSON *j = cJSON_CreateObject();
@@ -301,6 +361,13 @@ static esp_err_t status(httpd_req_t *r, int token)
                                  h->data.weather.meta.checked_at > 0 && time(NULL) > 0
                                      ? (double)(time(NULL) - h->data.weather.meta.checked_at)
                                      : -1);
+    if (ok) {
+        cJSON *hv = home_values_json(&h->data.home, &h->config, time(NULL));
+        if (hv)
+            cJSON_AddItemToObject(j, "home", hv);
+        else
+            ok = false;
+    }
     if (token >= 0 && ok) {
         const home_battery_t *b = &h->battery;
         cJSON *battery = cJSON_AddObjectToObject(j, "battery");
@@ -494,6 +561,7 @@ static esp_err_t api_inner(httpd_req_t *r)
      * panel reads by itself - the status (answered above), the frame after it changed, and
      * requests marked X-Home-Auto - or a tab left open would keep the radio on. */
     if (token >= 0 && !(r->method == HTTP_GET && !strcmp(path, "/api/frame")) &&
+        strcmp(path, "/api/home") && /* the homeserver is not a person at the panel */
         !httpd_req_get_hdr_value_len(r, "X-Home-Auto")) {
         home_lock();
         home_runtime.awake_until = esp_timer_get_time() + HOME_AWAKE_US;
@@ -529,6 +597,12 @@ static esp_err_t api_inner(httpd_req_t *r)
             return sent;
         }
 #endif
+        if (!strcmp(path, "/api/home")) {
+            home_lock();
+            cJSON *hv = home_values_json(&home_runtime.data.home, &home_runtime.config, time(NULL));
+            home_unlock();
+            return json_send(r, hv);
+        }
         if (!strcmp(path, "/api/timezones"))
             return json_send(r, home_timezones_json());
         if (!strcmp(path, "/api/location"))
@@ -734,6 +808,43 @@ static esp_err_t api_inner(httpd_req_t *r)
         home_runtime.request_id++;
         home_unlock();
         result = accepted(r);
+        goto done;
+    }
+    if (!strcmp(path, "/api/home")) {
+        int64_t now = time(NULL);
+        char why[64];
+        home_lock();
+        if (!home_runtime.time_valid || now < 1700000000) {
+            home_unlock();
+            result = error(r, "503 Service Unavailable", "clock_not_set");
+            goto done;
+        }
+        home_home_t next = home_runtime.data.home;
+        if (!home_push_apply(j, &next, now, why)) {
+            home_unlock();
+            result = error(r, "400 Bad Request", why);
+            goto done;
+        }
+        bool redraw = home_push_redraw(&home_runtime.data.home, &next, &home_runtime.config, now);
+        /* A chatty homeserver must not cost a 25 s refresh each time. */
+        int64_t mono = esp_timer_get_time();
+        if (redraw && (!home_runtime.push_redraw_at ||
+                       mono - home_runtime.push_redraw_at >= HOME_PUSH_REDRAW_US)) {
+            home_runtime.push_redraw_at = mono;
+            home_runtime.dirty = true;
+            home_runtime.request_id++;
+        } else
+            redraw = false;
+        home_runtime.data.home = next;
+        home_runtime.push_store_due = true; /* the minute bookkeeping writes it, at most every 15 min */
+        home_unlock();
+        httpd_resp_set_status(r, "202 Accepted");
+        cJSON *out = cJSON_CreateObject();
+        if (out && !cJSON_AddBoolToObject(out, "accepted", true))
+            cJSON_Delete(out), out = NULL;
+        if (out && !cJSON_AddBoolToObject(out, "redraw", redraw))
+            cJSON_Delete(out), out = NULL;
+        result = json_send(r, out);
         goto done;
     }
     if (!strcmp(path, "/api/refresh")) {

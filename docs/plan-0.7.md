@@ -16,10 +16,10 @@ Builds use ESP-IDF v6.0 from `~/esp/esp-idf-v6.0`. Nothing is committed yet. The
 | 2 Lineup and schema 2 | **Done, flashed, checked** | See below. |
 | 3 Bins | **Done, flashed, checked** (panel editor untried in a browser) | See below. |
 | 4 Today layouts | **Flashed, evening seen in preview** | App-only flash, hash verified. Evening layout looked right in `/api/preview`; day layout, bins window, paper and -12 degrees not yet seen. See below. |
-| 5 Alerts corner | **Built, not flashed** | See below. Battery-low and pushed-line chips wait for step 6. |
-| 6 Push | Not started | |
-| 7 Clean-up | Not started | Version still reads 0.6.2. |
-| 8 Rename to Inifuss | Not started | |
+| 5 Alerts corner | **Flashed, chips seen in preview** | See below. Battery-low and pushed-line chips wait for step 6. |
+| 6 Push | **Flashed, checked** (preview only, not on paper) | See below, and "Flash check". |
+| 7 Clean-up | **Partly done** | See below. |
+| 8 Rename to Inifuss | **Flashed, partly checked** | See "Flash check". |
 
 **Step 2, what is in.**
 - **Screens:** `HOME_TODAY/WEATHER/NOTE`, `HOME_SCREEN_COUNT 3`, `HOME_SCHEMA 2`.
@@ -106,6 +106,64 @@ Builds use ESP-IDF v6.0 from `~/esp/esp-idf-v6.0`. Nothing is committed yet. The
 - **Panel:** Alerts fields (rain per 12 h, per hour, wind) in the Today editor, `validate()` mirrors the limits.
   Syntax-checked only.
 - **Build:** 0x39e570 bytes, 8% of the slot free. Not flashed; chips not yet seen on paper.
+
+**Step 6, what is in (built only).**
+- **Module:** `home_push.c/.h`, pure, host-checked with cJSON (62 -> 61 no redraw, 15 redraws, bad bodies refused, ttl stale,
+  gone after 24 h, null and `[]` clear). Body keys: `battery {percent, kwh?, ttl_min?}`, `lines [{level, text}]`, and an
+  optional `lines_ttl_min` beside `lines`. Level is warn/info/outline (info when left out).
+- **Endpoint:** `POST /api/home` (503 `clock_not_set` until the clock is valid; 202 `{accepted, redraw}`), `GET /api/home`, and a
+  `home` object in `/api/status`. Exempt from the Breath awake extension. Redraw at most every 10 min; RAM is updated at once,
+  flash by the minute bookkeeping at most every 15 min. The phase-change key in `home_main.c` also holds the age of both
+  sections, so a value going stale redraws without a new push.
+- **Config:** `alerts.low_pct` (20) and `alerts.stale_min` (180), in the alerts block. The data record changes size again, so the cache is
+  dropped once more on first boot (weather refetches; the pushed values start empty).
+- **Render:** `home_battery_block()` at x 236 of the bottom band (gauge, percent, kWh; outline and "N h ago" when stale; dash after
+  24 h; nothing if never pushed). Fresh lines and "Battery N%" (below `low_pct`) are chips in the alerts corner, so they only
+  show where the corner does (Today with weather).
+- **CLI:** `home_cli.py push --battery 62 --kwh 8.1 --line warn:"Car not charging"`, `--clear-battery`, `--clear-lines`.
+- **Not done:** panel fields for `low_pct`/`stale_min`; bins line and battery block may touch in the bottom band (bins line
+  can reach x about 232); nothing seen on paper; power compared with the baseline not yet.
+- **Build:** 0x39f8f0 bytes, 8% free.
+
+**Step 7, what is in.**
+- **Version:** 0.7.0 in `firmware/CMakeLists.txt`, `HOME_VERSION_TEXT` and `HOME_UA`. The `HOME_UA` contact URL still points at the
+  upstream project (`fiedoruk/emini-home`); change it at step 8 if this fork gets its own page.
+- **Docs:** `docs/PRIVACY.md` rewritten for BOM (geohash sent), push, no pairing; README intro, Today section (Sky/Air/News gone),
+  privacy, credits; `docs/PANEL.md` screens table, Sky/Air sections removed.
+- **Not done:** release notes (downgrade resets settings and caches), Chinese strings for Today, clang-format/prettier on touched
+  lines, README/PANEL still mention pairing in the setup walk-through (the setup screen still shows a code; checked only by grep),
+  README's "0.5.1" photo caption and `docs/images` of removed screens, `SECURITY.md` and `THIRD_PARTY_NOTICES.md` not read.
+
+**Step 8, what is in (built only).**
+- **Firmware:** project and binary `inifuss` / `build/inifuss.bin` (0x39faf0 bytes); DHCP name and mDNS host `inifuss`; setup AP
+  `Inifuss`; mDNS instance `Inifuss Home-XXXX`; wordmark `INIFUSS`; "Inifuss" card; boot log; UA
+  `inifuss/0.7.0 (+https://github.com/SathyaBhat/emini-home)`. Help lines and the card QR now point at `github.com/SathyaBhat/emini-home`
+  (the fork's repo name is still `emini-home`; change the string in `home_render.c` if it is renamed).
+- **mDNS:** `home_discovery_start(unit_id, hostname[33])` registers `inifuss` and reads back the name actually used; `origin_ok()`
+  also accepts `inifuss-2.local` style names. The read-back happens right after start, so a conflict found later during probing is
+  not seen in `home_runtime.hostname` (only the numbered-name allowance in `origin_ok()` covers it). Not tried with a second responder.
+- **Panel:** title, brand link (fork repo), `i.` mark, setup-network text, footer link, download and recipe file names.
+- **Tools:** `home_cli.py` reads `$INIFUSS_HOST` (then `$EMINI_HOST`) and `~/.config/inifuss/` (then the old path); `preflight.py`
+  accepts project names `inifuss` and `emini_home_g3`; `compare_image.py` examples.
+- **Docs:** product name and links changed everywhere except upstream release links and asset names in INSTALL/BUILD
+  (`emini-home-0.6.2-*`, which are real upstream files); README says it is a fork of emini Home; the emini.ink website entries
+  are gone. LICENSE is untouched.
+- **Not done:** flash; check that the router shows `inifuss`, `http://inifuss.local` opens and saves, the setup network is
+  `Inifuss`, settings and the power log survive; `esp32ai.me` installer links still say `fw=emini-home`; the panel's saved
+  address in a phone may still be `home-xxxx.local`; the INSTALL/BUILD guides still describe upstream 0.6.2 files.
+
+**Flash check (steps 5-8 together, app-only flash over USB, hash verified, 0x39fb30 bytes).**
+- Panel answers at `http://inifuss.local` (192.168.0.49); `home-ff2e.local` no longer does. Version 0.7.0.
+- Push: 62 gave a redraw, 61 none, 101 got 400, 15 plus a line was accepted but inside the 10 min redraw limit (so no redraw).
+  Preview shows the red "Battery 15%" chip, the warn line, the UV chip and the gauge with one red segment.
+- Found and fixed on the unit: a long line was cut to "Car not..." (chips now drop to the 12 px font); the first push after boot
+  was not saved until 15 min of uptime (now saved at once, then at most every 15 min).
+- A push with `--ttl 5` survived a reset with its original time; after 5 min the battery went stale (outline gauge, "6 min ago",
+  low-battery chip gone) while the line stayed fresh. Power log: 168 hours kept, 143 of the 166 baseline hours unchanged.
+- `Host: inifuss-2.local` is accepted by the origin check.
+- **Not yet checked:** anything on the physical paper (only `/api/preview`); the day layout without a push; bins window; the
+  router name and the setup network name; a second mDNS responder; the panel editor in a browser; a 24 h "gone" dash.
+- The unit still holds the test push (15%, "Car not charging"). Clear with `home_cli.py push --clear-battery --clear-lines`.
 
 **Open items from step 2.**
 - The Today skeleton on paper has not been looked at.

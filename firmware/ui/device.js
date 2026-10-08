@@ -48,7 +48,7 @@
   const text = {
     en: {
       footerLine: "A little more room for your day.",
-      footerLink: "emini Home website ↗",
+      footerLink: "Inifuss on GitHub ↗",
       footerPrivacy:
         "Your settings stay on your Home. No account. Home sends no analytics.",
       connecting: "Connecting to Home…",
@@ -257,7 +257,7 @@
       name: "Name of your Home",
       language: "Display language",
       okAction: "Short press of OK / BOOT",
-      okInfo: "Show the emini card (battery and numbers)",
+      okInfo: "Show the Inifuss card (battery and numbers)",
       okRefresh: "Check for updates now",
       okHold: "Hold the current screen (press again to resume)",
       okSetup: "Open the setup window (Wi-Fi and pairing)",
@@ -340,7 +340,7 @@
     },
     pl: {
       footerLine: "Trochę więcej miejsca na Twój dzień.",
-      footerLink: "Strona emini Home ↗",
+      footerLink: "Inifuss na GitHubie ↗",
       footerPrivacy:
         "Ustawienia zostają na Twoim Home. Bez konta. Home nie wysyła analityki.",
       connecting: "Łączenie z Home…",
@@ -524,7 +524,7 @@
       name: "Nazwa Twojego Home",
       language: "Język ekranu",
       okAction: "Krótkie naciśnięcie OK / BOOT",
-      okInfo: "Pokaż kartę emini (bateria i liczby)",
+      okInfo: "Pokaż kartę Inifuss (bateria i liczby)",
       okRefresh: "Sprawdź aktualizacje",
       okHold: "Zatrzymaj bieżący ekran (drugie naciśnięcie wznawia)",
       okSetup: "Otwórz okno konfiguracji (Wi-Fi i parowanie)",
@@ -701,7 +701,7 @@
     S.scanEpoch++;
   }
   function connectionHelp() {
-    return `<details class="source-details"><summary>${say("Connection help", "Pomoc z połączeniem")}</summary><div class="source-state"><p>${say("On the device Wi-Fi “emini.ink”, use", "W sieci urządzenia „emini.ink” użyj")} <a href="http://192.168.4.1/" referrerpolicy="no-referrer">http://192.168.4.1</a>.</p><p>${say("Home’s home-network address is for your usual home Wi-Fi. Switch your phone to that network before opening it.", "Adres Home w domowej sieci jest przeznaczony dla domowego Wi-Fi. Przełącz telefon na tę sieć, zanim otworzysz ten adres.")}</p><a class="button-link" href="/">${say("Reload this local panel", "Wczytaj ten panel ponownie")}</a></div></details>`;
+    return `<details class="source-details"><summary>${say("Connection help", "Pomoc z połączeniem")}</summary><div class="source-state"><p>${say("On the device Wi-Fi “Inifuss”, use", "W sieci urządzenia „Inifuss” użyj")} <a href="http://192.168.4.1/" referrerpolicy="no-referrer">http://192.168.4.1</a>.</p><p>${say("Home’s home-network address is for your usual home Wi-Fi. Switch your phone to that network before opening it.", "Adres Home w domowej sieci jest przeznaczony dla domowego Wi-Fi. Przełącz telefon na tę sieć, zanim otworzysz ten adres.")}</p><a class="button-link" href="/">${say("Reload this local panel", "Wczytaj ten panel ponownie")}</a></div></details>`;
   }
   function lanAccessAction() {
     const access = C.lanHandoffState(
@@ -713,7 +713,7 @@
     if (access.same)
       return `<button class="primary wide" data-action="wifi-finish">${say("Continue to Home", "Przejdź do Home")}${icon("arrow")}</button>`;
     if (!access.allowed)
-      return `<p class="connection-help">${say("If your phone is still on “emini.ink”, switch it to your home Wi-Fi in its Wi-Fi settings, then return here.", "Jeśli telefon jest jeszcze w sieci „emini.ink”, przełącz go w ustawieniach Wi-Fi na sieć domową i wróć tutaj.")}</p><button class="primary wide" data-action="phone-network-changed">${say("My phone is on home Wi-Fi", "Telefon jest już w domowym Wi-Fi")}</button>`;
+      return `<p class="connection-help">${say("If your phone is still on “Inifuss”, switch it to your home Wi-Fi in its Wi-Fi settings, then return here.", "Jeśli telefon jest jeszcze w sieci „Inifuss”, przełącz go w ustawieniach Wi-Fi na sieć domową i wróć tutaj.")}</p><button class="primary wide" data-action="phone-network-changed">${say("My phone is on home Wi-Fi", "Telefon jest już w domowym Wi-Fi")}</button>`;
     return `<a class="button-link primary" href="${access.url}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">${say("Open Home", "Otwórz Home")} · ${esc(S.status.address)}${icon("arrow")}</a>`;
   }
   iconPaths.more =
@@ -1230,7 +1230,7 @@
   function wifiPassword() {
     const manual = S.wifiStep === "manual",
       n = S.networkChoice;
-    return `<div class="network-selected"><span class="network-selected-icon">${icon("wifi")}</span><div><strong>${manual ? say("Hidden network", "Ukryta sieć") : esc(n?.ssid || "")}</strong><small>2.4 GHz · WPA2 / WPA3 Personal</small></div></div><form class="wifi-form" id="wifi-form" autocomplete="off">${manual ? `<label class="field"><span>${t("ssid")}</span><input name="ssid" maxlength="32" required autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="${say("Exact network name", "Dokładna nazwa sieci")}"></label>` : `<input type="hidden" name="ssid" value="${esc(n?.ssid || "")}">`}<label class="field"><span>${t("password")}</span><span class="password-field"><input name="password" id="wifi-password" type="password" minlength="8" maxlength="63" required autocomplete="new-password" placeholder="${say("Password for this network", "Hasło do tej sieci")}"><button type="button" data-action="password-toggle" aria-label="${say("Show password", "Pokaż hasło")}" aria-pressed="false">${icon("eye")}</button></span></label><p class="hint">${say("This goes directly to your Home. It is never included in a recipe or sent to emini.ink.", "Hasło trafia bezpośrednio do Twojego Home. Nie jest częścią przepisu ani nie trafia do emini.ink.")}</p><button type="submit" class="primary wide">${icon("wifi")}${say("Connect Home", "Połącz Home")}</button><button type="button" class="text" data-action="wifi-list">${say("Choose another network", "Wybierz inną sieć")}</button></form>`;
+    return `<div class="network-selected"><span class="network-selected-icon">${icon("wifi")}</span><div><strong>${manual ? say("Hidden network", "Ukryta sieć") : esc(n?.ssid || "")}</strong><small>2.4 GHz · WPA2 / WPA3 Personal</small></div></div><form class="wifi-form" id="wifi-form" autocomplete="off">${manual ? `<label class="field"><span>${t("ssid")}</span><input name="ssid" maxlength="32" required autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="${say("Exact network name", "Dokładna nazwa sieci")}"></label>` : `<input type="hidden" name="ssid" value="${esc(n?.ssid || "")}">`}<label class="field"><span>${t("password")}</span><span class="password-field"><input name="password" id="wifi-password" type="password" minlength="8" maxlength="63" required autocomplete="new-password" placeholder="${say("Password for this network", "Hasło do tej sieci")}"><button type="button" data-action="password-toggle" aria-label="${say("Show password", "Pokaż hasło")}" aria-pressed="false">${icon("eye")}</button></span></label><p class="hint">${say("This goes directly to your Home. It is never included in a recipe or sent anywhere.", "Hasło trafia bezpośrednio do Twojego Home. Nie jest częścią przepisu ani nie trafia nigdzie indziej.")}</p><button type="submit" class="primary wide">${icon("wifi")}${say("Connect Home", "Połącz Home")}</button><button type="button" class="text" data-action="wifi-list">${say("Choose another network", "Wybierz inną sieć")}</button></form>`;
   }
   function wifiProgress() {
     const outcome = C.wifiOutcome(
@@ -2692,7 +2692,7 @@
       }
     ctx.fillStyle = "#1a1a16";
     ctx.font = "bold 12px monospace";
-    ctx.fillText(t("sample") + " / emini.ink", 24, 124);
+    ctx.fillText(t("sample") + " / Inifuss", 24, 124);
     ctx.font = "bold 40px sans-serif";
     ctx.fillText(t("sampleTitle"), 22, 178);
     ctx.fillText(t("sampleTitle2"), 22, 224);
@@ -2740,7 +2740,7 @@
     };
     $("#download-image").onclick = () => {
       canvas.toBlob((blob) => {
-        if (blob) download(blob, "emini-home-" + kind + ".png");
+        if (blob) download(blob, "inifuss-" + kind + ".png");
       }, "image/png");
     };
   }
@@ -2867,7 +2867,7 @@
           new Blob([JSON.stringify(recipe, null, 2) + "\n"], {
             type: "application/json",
           }),
-          "emini-home-recipe.json",
+          "inifuss-recipe.json",
         );
       } else if (a === "image") imageReview();
     } catch (err) {

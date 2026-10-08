@@ -6,7 +6,7 @@
 
 /* The alerts corner of Today. Pure: no I/O, no clock, no locks. Empty when nothing needs doing. */
 #define HOME_ALERT_SLOTS 3
-enum { HOME_ALERT_RAIN = 1, HOME_ALERT_WIND, HOME_ALERT_UV, HOME_ALERT_OLD };
+enum { HOME_ALERT_RAIN = 1, HOME_ALERT_WIND, HOME_ALERT_UV, HOME_ALERT_OLD, HOME_ALERT_PUSH, HOME_ALERT_BATTERY };
 /* warn = red chip, info = yellow chip with a border, outline = paper chip with an outline. */
 enum { HOME_ALERT_WARN = 0, HOME_ALERT_INFO = 1, HOME_ALERT_OUTLINE = 2 };
 typedef struct {

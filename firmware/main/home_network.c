@@ -367,7 +367,7 @@ esp_err_t home_network_start(void)
     station = esp_netif_create_default_wifi_sta();
     if (!station)
         return ESP_ERR_NO_MEM;
-    esp_netif_set_hostname(station, "emini-home");
+    esp_netif_set_hostname(station, "inifuss");
     wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
     init.nvs_enable = 0;
     if ((e = esp_wifi_init(&init)) != ESP_OK)
@@ -412,7 +412,7 @@ esp_err_t home_network_start(void)
      * own code did. With every third beacon it wakes about three times a second and the share
      * falls to under a fifth: the chip is free to sleep about 80 % of the time. The cost is latency
      * for frames the access point buffers, multicast mDNS included: measured, the panel still
-     * answers in well under a second and home-xxxx.local still resolves. A longer interval would
+     * answers in well under a second and inifuss.local still resolves. A longer interval would
      * save more but risks both, so it stays at three. */
     esp_err_t ps = esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
     if (ps != ESP_OK)

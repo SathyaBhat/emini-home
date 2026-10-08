@@ -49,9 +49,11 @@ typedef struct {
     uint8_t fixed_screen;
     uint16_t interval_min, pause_min;
     uint16_t cycle_min; /* "In turn": minutes per composition while a screen stays */
-    uint8_t ok_action;  /* short OK/BOOT: 0 the "emini" card, 1 refresh, 2 hold, 3 setup window */
+    uint8_t ok_action;  /* short OK/BOOT: 0 the "Inifuss" card, 1 refresh, 2 hold, 3 setup window */
     uint16_t rain_sum_x10, rain_hour_x10; /* rain alert: mm over the window, mm in one hour, x10 */
     uint16_t wind_kmh;                    /* wind alert */
+    uint8_t home_low_pct;                 /* pushed battery: red gauge and chip below this */
+    uint16_t home_stale_min;              /* a pushed value without its own ttl goes stale after */
     uint8_t brush;      /* tone structure: 0 grain, 1 halftone, 2 grid */
     uint8_t power_mode; /* home_power_mode_t */
     bool quiet_enabled;
@@ -113,8 +115,23 @@ typedef struct {
     home_day_t day[HOME_WEATHER_DAYS];
     uint8_t day_count;
 } home_weather_t;
+/* Values the homeserver pushes to POST /api/home (docs/plan-0.7.md). */
+#define HOME_PUSH_LINES 3
+enum { HOME_LINE_WARN = 0, HOME_LINE_INFO = 1, HOME_LINE_OUTLINE = 2 };
+typedef struct {
+    uint8_t level;
+    char text[25];
+} home_line_t;
+typedef struct {
+    int64_t battery_at, lines_at;            /* UTC received; 0 = never */
+    uint16_t battery_ttl_min, lines_ttl_min; /* 0 = home_stale_min */
+    float battery_percent, battery_kwh;      /* NAN when unknown */
+    uint8_t line_count;
+    home_line_t line[HOME_PUSH_LINES];
+} home_home_t;
 typedef struct {
     home_weather_t weather;
+    home_home_t home;
 } home_data_t;
 
 /* Counters kept across restarts, written at most once every few minutes. */
@@ -127,7 +144,7 @@ typedef struct {
     int8_t battery_day[7];
 } home_counters_t;
 
-/* What the device knows about itself, for the "emini" card (0.6). Counters survive a restart;
+/* What the device knows about itself, for the "Inifuss" card (0.6). Counters survive a restart;
  * battery_day[0] is today, [6] is six days ago, -1 where no reading was kept. */
 #define HOME_BATTERY_DAYS 7
 
@@ -179,7 +196,7 @@ typedef struct {
     char address[40];      /* the panel's own name on the home network */
 } home_stats_t;
 
-/* The "emini" card has two faces. The first is for showing people: the battery, the wordmark
+/* The "Inifuss" card has two faces. The first is for showing people: the battery, the wordmark
  * and the QR code - the photo someone posts. The second is for the curious: every counter and
  * a week of battery. Each short press moves to the next face, the third takes the card away -
  * never a redraw on a timer, because every picture costs 25 seconds of paper. */

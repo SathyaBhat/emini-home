@@ -1,6 +1,6 @@
 # Build from source
 
-You do not need to build anything to use emini Home: the release page has
+You do not need to build anything to use Inifuss: the release page has
 ready images. Build it yourself when you want to change the firmware or check
 what the release contains.
 
@@ -27,7 +27,7 @@ variable with `$env:IDF_COMPONENT_MANAGER=0` instead of `export`.
 
 The results are:
 
-- `build/emini_home_g3.bin`, the application written at `0x20000`
+- `build/inifuss.bin`, the application written at `0x20000`
 - `build/partition_table/partition-table.bin`, written at `0x8000`
 
 The phone panel in `firmware/ui` is embedded into the application at build
@@ -77,7 +77,7 @@ should be. To check, download `emini-home-0.6.2-note4c.bin` from the release
 into the `firmware` folder and run, still from `firmware`:
 
 ```sh
-python3 ../tools/compare_image.py build/emini_home_g3.bin emini-home-0.6.2-note4c.bin
+python3 ../tools/compare_image.py build/inifuss.bin emini-home-0.6.2-note4c.bin
 ```
 
 `MATCH` means the two images differ only in the build timestamp and the

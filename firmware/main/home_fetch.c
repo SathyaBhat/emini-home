@@ -26,7 +26,7 @@
 #define LINE_MAX_BYTES 8192U /* GitHub Atom sends a ~3.6KiB CSP header. */
 #define REQUEST_US INT64_C(25000000)
 /* Public source repository is a contact pointer, never a user/device identifier. */
-#define HOME_UA "emini-home/0.7 (+https://github.com/fiedoruk/emini-home)"
+#define HOME_UA "inifuss/0.7.0 (+https://github.com/SathyaBhat/emini-home)"
 /* Shortest gap between two questions to the same provider, whatever it says about freshness. */
 #define HOME_MIN_POLL_S 1800
 typedef struct {

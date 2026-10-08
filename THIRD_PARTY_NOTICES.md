@@ -1,6 +1,7 @@
 # Third-party notices
 
-emini Home's own code is released under the [MIT License](LICENSE). It builds
+Inifuss's own code is released under the [MIT License](LICENSE). It is a fork of
+[emini Home](https://github.com/fiedoruk/emini-home) by Tomasz Fiedoruk (MIT) and builds
 on the work below. Each component keeps its own licence; where a licence text is
 required, it is next to the component source or in [`licenses/`](licenses/).
 
@@ -80,5 +81,5 @@ the licence in `licenses/esp-idf/wpa_supplicant/README`: Copyright (c)
 ## Trademarks
 
 ZECTRIX and NOTE4C may be trademarks of their owner. The author bought the
-NOTE4C used for development at the retail price. emini Home is an independent
+NOTE4C used for development at the retail price. Inifuss is an independent
 project, not made or sponsored by ZECTRIX.

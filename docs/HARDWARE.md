@@ -1,6 +1,6 @@
 # Hardware
 
-emini Home 0.6.2 supports one device: the **ZECTRIX NOTE4C Devkit** with the
+Inifuss 0.6.2 supports one device: the **ZECTRIX NOTE4C Devkit** with the
 four-colour display.
 
 | Part | Details |
@@ -109,7 +109,7 @@ the USB maintenance protocol behave exactly as they did before.
 
 ## Flash layout
 
-The factory layout on the tested unit, and what emini Home adds:
+The factory layout on the tested unit, and what Inifuss adds:
 
 | Name | Offset | Size | Written by Home |
 | --- | --- | --- | --- |

@@ -1,9 +1,9 @@
 # Contributing
 
-Thanks for looking at emini Home. The most valuable contribution right now is
+Thanks for looking at Inifuss. The most valuable contribution right now is
 simple: **tell us how installation went on your NOTE4C.** This release has been
 tested on one unit, so every
-[hardware report](https://github.com/fiedoruk/emini-home/issues/new?template=hardware-report.yml)
+[hardware report](https://github.com/SathyaBhat/emini-home/issues/new?template=hardware-report.yml)
 helps others decide whether it is safe to install.
 
 ## Issues

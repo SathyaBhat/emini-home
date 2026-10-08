@@ -4,10 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-emini Home is ESP32-S3 firmware for the ZECTRIX NOTE4C, a four-colour (black/white/red/yellow)
+Inifuss is ESP32-S3 firmware for the ZECTRIX NOTE4C, a four-colour (black/white/red/yellow)
 e-paper devkit. It draws a daily poster (weather, one headline, a personal note, sun/moon, air
 quality) and is configured entirely from a phone browser panel served by the device itself — no
-app, no account, no emini.ink server in the loop after setup. Tested and released against exactly
+app, no account, no server of ours in the loop after setup. Tested and released against exactly
 one physical unit; see the README "Status" section before assuming behaviour is verified broadly.
 
 ## Build
@@ -23,7 +23,7 @@ Requires ESP-IDF **v6.0** exactly (tag `v6.0`, commit `662a3be354759d9487bf4b1a6
 activated in the shell. Nothing else needs installing — fonts, the noise mask and the time-zone
 table are pre-generated into `firmware/main/generated/`.
 
-Outputs: `build/emini_home_g3.bin` (app, flashed at `0x20000`) and
+Outputs: `build/inifuss.bin` (app, flashed at `0x20000`) and
 `build/partition_table/partition-table.bin` (flashed at `0x8000`). The phone panel
 (`firmware/ui/*`) is embedded into the binary via `EMBED_FILES` in `firmware/main/CMakeLists.txt`;
 edit the UI source there, not a built copy.
@@ -36,7 +36,7 @@ Two debug-only build flags, never used in a release:
 
 To compare a local build against a release binary (accounting for the embedded build timestamp):
 ```sh
-python3 tools/compare_image.py firmware/build/emini_home_g3.bin emini-home-<ver>-note4c.bin
+python3 tools/compare_image.py firmware/build/inifuss.bin inifuss-<ver>-note4c.bin
 ```
 
 ## No test suite

@@ -1,4 +1,5 @@
 #include "home_alerts.h"
+#include "home_push.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -99,6 +100,16 @@ int home_alerts(const home_config_t *cfg, const home_data_t *data, int64_t now, 
         weather_alerts(&l, cfg, w, now, today_day, evening);
         uv_alert(&l, w, evening ? today_day + 1 : today_day);
     }
+    /* The homeserver's own words; only while fresh, a stale line would say something untrue. */
+    if (clock && home_push_age(&data->home, HOME_PUSH_BATTERY, cfg, now) == HOME_PUSH_FRESH &&
+        data->home.battery_percent < cfg->home_low_pct) {
+        char text[48];
+        snprintf(text, sizeof text, "Battery %.0f%%", data->home.battery_percent);
+        add(&l, HOME_ALERT_BATTERY, HOME_ALERT_WARN, text);
+    }
+    if (clock && home_push_age(&data->home, HOME_PUSH_LINES_SECTION, cfg, now) == HOME_PUSH_FRESH)
+        for (int i = 0; i < data->home.line_count; ++i)
+            add(&l, HOME_ALERT_PUSH, data->home.line[i].level, data->home.line[i].text);
     if (w->meta.valid && (w->meta.state == HOME_ERROR ||
                           (clock && now - w->meta.fetched_at > HOME_ALERT_OLD_S)))
         add(&l, HOME_ALERT_OLD, HOME_ALERT_OUTLINE, "Old weather");
