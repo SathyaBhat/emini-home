@@ -189,7 +189,7 @@ static const phrase_t chinese[] = {
     {"Waxing gibbous", "盈凸月"},
     {"Weather", "天气"},
     {"Weather forecast", "天气预报"},
-    {"Wind %s m/s", "风 %s 米/秒"},
+    {"Wind %s km/h", "风 %s 公里/时"},
     {"Wind —", "风 —"},
     {"With you for %lld days", "陪伴你 %lld 天"},
     {"Write a message in your phone panel. A reminder, a thought, something worth keeping in view.",
@@ -852,7 +852,8 @@ static void disc(canvas_t *c, int cx, int cy, int rx, int ry, const home_weather
 }
 static void rain_field(canvas_t *c, const home_weather_t *w, int y0, int y1)
 {
-    double rain = clamp(w->precipitation, 0, 20), wind = clamp(w->wind_speed, 0, 40);
+    /* The sky is drawn in m/s. */
+    double rain = clamp(w->precipitation, 0, 20), wind = clamp(w->wind_speed / 3.6, 0, 40);
     int16_t wind_shift[H]; /* 600B, no heap; preserve exact integer rain positions. */
     for (int y = y0; y < y1; ++y)
         wind_shift[y] = (int16_t)(wind * y / 12);
@@ -958,8 +959,8 @@ static void weather(canvas_t *c, const home_config_t *cfg, const home_weather_t 
     if (!rain_outlook(rain, sizeof rain, cfg, w, now))
         rain_amount(rain, sizeof rain, w, lang);
     if (isfinite(w->wind_speed)) {
-        number(a, sizeof a, clamp(w->wind_speed, 0, 150), 1, lang);
-        snprintf(wind, sizeof wind, tr(lang, "Wind %s m/s", "Wiatr %s m/s"), a);
+        number(a, sizeof a, clamp(w->wind_speed, 0, 540), 0, lang);
+        snprintf(wind, sizeof wind, tr(lang, "Wind %s km/h", "Wiatr %s km/h"), a);
     } else
         snprintf(wind, sizeof wind, "%s", tr(lang, "Wind —", "Wiatr —"));
     snprintf(metrics, sizeof metrics, "%s · %s", rain, wind);
@@ -1034,7 +1035,7 @@ static void weather(canvas_t *c, const home_config_t *cfg, const home_weather_t 
         txt(c, 208, 236, 178, 20, 1, wind);
     } else {
         float cloud = (float)clamp(w->cloud_cover / 100, 0, 1);
-        double wind = clamp(w->wind_speed, 0, 50);
+        double wind = clamp(w->wind_speed / 3.6, 0, 50); /* the sky is drawn in m/s */
         c->raster = raster;
         for (int x = 184; x < W; ++x) {
             float coverage = (x - 184) / 216.0f * (0.12f + cloud * 0.4f);
@@ -1062,7 +1063,7 @@ static void weather(canvas_t *c, const home_config_t *cfg, const home_weather_t 
         txt(c, 14, 148 - lift, 171, 68 + lift, lift ? 3 : 2, sky);
         txt(c, 14, 236, 372, 23, 1, metrics);
     }
-    source_footer(c, cfg, &w->meta, now, "MET Norway · CC BY 4.0", w->forecast_at);
+    source_footer(c, cfg, &w->meta, now, "Bureau of Meteorology", w->forecast_at);
 }
 static uint32_t fingerprint(const char *s, size_t cap)
 {
@@ -1643,14 +1644,14 @@ static void today_footer(canvas_t *c, const home_config_t *cfg, const home_weath
     home_source_state_t st = state_at(&w->meta, now);
     int64_t at = time_valid(w->meta.checked_at) ? w->meta.checked_at : w->meta.fetched_at;
     if (st == HOME_ERROR || st == HOME_STALE || !w->meta.valid)
-        snprintf(line, sizeof line, "MET Norway · CC BY 4.0 · %s",
+        snprintf(line, sizeof line, "Bureau of Meteorology · %s",
                  "older data");
     else if (time_valid(at) && home_tz_localtime(cfg->timezone, at, &tm)) {
         clock_text(clk, sizeof clk, &tm, cfg->clock24, false, true);
-        snprintf(line, sizeof line, "MET Norway · CC BY 4.0 · %s %s",
+        snprintf(line, sizeof line, "Bureau of Meteorology · %s %s",
                  "checked", clk);
     } else
-        snprintf(line, sizeof line, "MET Norway · CC BY 4.0");
+        snprintf(line, sizeof line, "Bureau of Meteorology");
     txt(c, 14, 286, 372, 14, 6, line);
 }
 /* Today, in two layouts. By day: the date, the weather now, when it rains, the next six hours.
@@ -1705,11 +1706,11 @@ static void today(canvas_t *c, const home_config_t *cfg, const home_weather_t *w
         txt(c, 88 + imin(width(4, a, 24) + 40, 150), 76, 100, 36, 3, value);
         char mm[24], ms[24];
         number(mm, sizeof mm, clamp(tom->rain, 0, 999), tom->rain < 10 ? 1 : 0, lang);
-        number(ms, sizeof ms, clamp(tom->wind, 0, 99), 0, lang);
+        number(ms, sizeof ms, clamp(tom->wind, 0, 360), 0, lang);
         if (tom->rain < 0.05f)
-            snprintf(buf, sizeof buf, "Dry · wind %s m/s", ms);
+            snprintf(buf, sizeof buf, "Dry · wind %s km/h", ms);
         else
-            snprintf(buf, sizeof buf, "Rain %s mm · wind %s m/s", mm, ms);
+            snprintf(buf, sizeof buf, "Rain %s mm · wind %s km/h", mm, ms);
         txt(c, 14, 114, 372, 24, 2, buf);
         if (sun_line(buf, sizeof buf, cfg, now, true))
             txt(c, 14, 142, 372, 20, 1, buf);

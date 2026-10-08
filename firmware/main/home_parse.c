@@ -270,42 +270,6 @@ static const char *string_value(const cJSON *value)
 {
     return cJSON_IsString(value) ? value->valuestring : NULL;
 }
-static const cJSON *instant(const cJSON *point)
-{
-    return member(member(member(point, "data"), "instant"), "details");
-}
-static bool metric(const cJSON *object, const char *key, double min, double max, bool required,
-                   double *out)
-{
-    const cJSON *value = member(object, key);
-    if (!value) {
-        *out = NAN;
-        return !required;
-    }
-    if (!cJSON_IsNumber(value) || !isfinite(value->valuedouble) || value->valuedouble < min ||
-        value->valuedouble > max)
-        return false;
-    *out = value->valuedouble;
-    return true;
-}
-static bool rain(const cJSON *point, double *out)
-{
-    return metric(member(member(member(point, "data"), "next_1_hours"), "details"),
-                  "precipitation_amount", 0, 1000, false, out);
-}
-static const cJSON *period(const cJSON *point, const char *name)
-{
-    return member(member(point, "data"), name);
-}
-static bool period_rain(const cJSON *point, const char *name, double *out)
-{
-    return metric(member(period(point, name), "details"), "precipitation_amount", 0, 1000, false,
-                  out);
-}
-static const char *period_symbol(const cJSON *point, const char *name)
-{
-    return string_value(member(member(period(point, name), "summary"), "symbol_code"));
-}
 uint8_t home_symbol_code(const char *code)
 {
     static const struct {
@@ -344,11 +308,6 @@ static int64_t local_day(const char *zone, int64_t at, int32_t *offset_out)
         *offset_out = offset;
     return floor_div(at + offset, 86400);
 }
-static bool unit(const cJSON *units, const char *key, const char *expected)
-{
-    const cJSON *value = member(units, key);
-    return !value || (cJSON_IsString(value) && !strcmp(value->valuestring, expected));
-}
 static bool json_members(const cJSON *node, unsigned depth)
 {
     if (!node || depth > 16)
@@ -368,18 +327,117 @@ static bool json_members(const cJSON *node, unsigned depth)
     return true;
 }
 
-bool home_parse_weather(const char *json, size_t len, home_weather_t *out, int64_t now,
-                        const char *zone, char error[97])
+/* ---- Bureau of Meteorology (api.weather.bom.gov.au/v1), the hourly and daily forecasts of
+ * one location. BOM names the weather with its own words (icon_descriptor); they are mapped to
+ * the met.no symbol codes the renderer was written against, so home_symbol_code() and
+ * condition() keep working. The location is a geohash, which we compute from the coordinates. */
+static const struct {
+    const char *descriptor, *symbol;
+    int cloud; /* percent, for the Weather screen's sky */
+} bom_icons[] = {{"sunny", "clearsky", 0},
+                 {"clear", "clearsky", 0},
+                 {"mostly_sunny", "fair", 20},
+                 {"partly_cloudy", "partlycloudy", 50},
+                 {"cloudy", "cloudy", 100},
+                 {"hazy", "fair", 40},
+                 {"light_haze", "fair", 30},
+                 {"fog", "fog", 100},
+                 {"dusty", "fair", 40},
+                 {"light_shower", "lightrainshowers", 70},
+                 {"shower", "rainshowers", 80},
+                 {"heavy_shower", "heavyrainshowers", 90},
+                 {"light_rain", "lightrain", 85},
+                 {"drizzle", "lightrain", 85},
+                 {"rain", "rain", 90},
+                 {"heavy_rain", "heavyrain", 100},
+                 {"storm", "rainandthunder", 100},
+                 {"snow", "snow", 100},
+                 {"frost", "clearsky", 0},
+                 {"windy", "fair", 20},
+                 {"wind", "fair", 20}};
+/* met.no style symbol code for a BOM descriptor ("" when unknown); *cloud gets the cover. */
+static const char *bom_symbol(const char *descriptor, int *cloud)
 {
-    if (!out || now <= 0 || now > INT64_C(253402300799) || !valid_body(json, len) ||
-        !json_shape(json, len))
-        return fail(error, "Invalid or oversized weather JSON");
+    if (descriptor)
+        for (size_t i = 0; i < sizeof bom_icons / sizeof *bom_icons; ++i)
+            if (!strcmp(descriptor, bom_icons[i].descriptor)) {
+                if (cloud)
+                    *cloud = bom_icons[i].cloud;
+                return bom_icons[i].symbol;
+            }
+    if (cloud)
+        *cloud = -1;
+    return "";
+}
+void home_geohash(double lat, double lon, char *out, unsigned chars)
+{
+    static const char alphabet[] = "0123456789bcdefghjkmnpqrstuvwxyz";
+    double lo[2] = {-90, -180}, hi[2] = {90, 180}, v[2] = {lat, lon};
+    unsigned bit = 0, idx = 0, n = 0;
+    bool even = true; /* longitude first */
+    while (n < chars) {
+        int k = even ? 1 : 0;
+        double mid = (lo[k] + hi[k]) / 2;
+        idx <<= 1;
+        if (v[k] >= mid) {
+            idx |= 1;
+            lo[k] = mid;
+        } else
+            hi[k] = mid;
+        even = !even;
+        if (++bit == 5) {
+            out[n++] = alphabet[idx];
+            bit = idx = 0;
+        }
+    }
+    out[n] = 0;
+}
+/* A number, a JSON null or an absent key (all NAN); false for anything else or out of range. */
+static bool num(const cJSON *object, const char *key, double min, double max, double *out)
+{
+    const cJSON *value = member(object, key);
+    *out = NAN;
+    if (!value || cJSON_IsNull(value))
+        return true;
+    if (!cJSON_IsNumber(value) || !isfinite(value->valuedouble) || value->valuedouble < min ||
+        value->valuedouble > max)
+        return false;
+    *out = value->valuedouble;
+    return true;
+}
+/* Rain of a period from {"amount": {"min", "max"}}: the middle of the range; no amount is none. */
+static bool rain_of(const cJSON *rain, double *out)
+{
+    const cJSON *amount = member(rain, "amount");
+    double lo, hi;
+    if (!num(amount, "min", 0, 1000, &lo) || !num(amount, "max", 0, 1000, &hi))
+        return false;
+    *out = isfinite(lo) && isfinite(hi) ? (lo + hi) / 2 : isfinite(lo) ? lo : isfinite(hi) ? hi : 0;
+    return true;
+}
+static cJSON *parse_json(const char *json, size_t len)
+{
+    if (!valid_body(json, len) || !json_shape(json, len))
+        return NULL;
     const char *end = NULL;
     cJSON *root = cJSON_ParseWithLengthOpts(json, len, &end, false);
     if (!root)
-        return fail(error, "Malformed weather JSON");
+        return NULL;
     while (end < json + len && space((unsigned char)*end))
         ++end;
+    if (end != json + len || !json_members(root, 0)) {
+        cJSON_Delete(root);
+        return NULL;
+    }
+    return root;
+}
+
+bool home_parse_weather(const char *hourly, size_t hourly_len, const char *daily, size_t daily_len,
+                        home_weather_t *out, int64_t now, const char *zone, char error[97])
+{
+    if (!out || now <= 0 || now > INT64_C(253402300799))
+        return fail(error, "Invalid weather request");
+    cJSON *hroot = parse_json(hourly, hourly_len), *droot = parse_json(daily, daily_len);
     bool ok = false;
     const char *reason = "Invalid weather schema";
     home_weather_t parsed = {0};
@@ -388,28 +446,40 @@ bool home_parse_weather(const char *json, size_t len, home_weather_t *out, int64
         parsed.hourly_temperature[i] = parsed.hourly_rain[i] = NAN;
         parsed.hourly_wind[i] = NAN;
     }
-    const cJSON *properties = member(root, "properties"), *meta = member(properties, "meta");
-    const cJSON *units = member(meta, "units"), *series = member(properties, "timeseries");
-    parsed.meta.issued_at = home_parse_time(string_value(member(meta, "updated_at")));
-    int count = cJSON_GetArraySize(series);
-    if (end != json + len || !json_members(root, 0) || !cJSON_IsArray(series) || count < 1 ||
-        count > 512 || parsed.meta.issued_at < 0 || parsed.meta.issued_at > now + 300 ||
-        !unit(units, "air_temperature", "celsius") || !unit(units, "wind_speed", "m/s") ||
-        !unit(units, "cloud_area_fraction", "%") || !unit(units, "precipitation_amount", "mm"))
+    for (unsigned i = 0; i < HOME_WEATHER_DAYS; ++i)
+        parsed.day[i].low = parsed.day[i].high = parsed.day[i].rain = parsed.day[i].wind = NAN;
+    const cJSON *series = member(hroot, "data"), *days = member(droot, "data");
+    if (!hroot || !droot) {
+        reason = "Malformed weather JSON";
         goto done;
-    int64_t previous = -1, selected_time = -1;
+    }
+    parsed.meta.issued_at = home_parse_time(string_value(member(member(hroot, "metadata"), "issue_time")));
+    int count = cJSON_GetArraySize(series);
+    if (!cJSON_IsArray(series) || !cJSON_IsArray(days) || count < 1 || count > 512 ||
+        parsed.meta.issued_at < 0 || parsed.meta.issued_at > now + 300)
+        goto done;
+    int64_t previous = -1, selected_time = -1, today = local_day(zone, now, NULL);
     unsigned hours = 0;
     double min24 = INFINITY, max24 = -INFINITY;
+    double day_low[HOME_WEATHER_DAYS], day_high[HOME_WEATHER_DAYS];
+    for (unsigned i = 0; i < HOME_WEATHER_DAYS; ++i)
+        day_low[i] = INFINITY, day_high[i] = -INFINITY;
     for (const cJSON *point = series->child; point; point = point->next) {
         int64_t at = home_parse_time(string_value(member(point, "time")));
-        double temperature;
-        if (at < 0 || at <= previous ||
-            !metric(instant(point), "air_temperature", -100, 70, true, &temperature)) {
-            reason = "Invalid forecast time or temperature";
+        double temperature, wind, amount;
+        if (at < 0 || at <= previous || !num(point, "temp", -100, 70, &temperature) ||
+            !isfinite(temperature) || !num(member(point, "wind"), "speed_kilometre", 0, 500, &wind) ||
+            !rain_of(member(point, "rain"), &amount)) {
+            reason = "Invalid forecast time or value";
             goto done;
         }
         previous = at;
-        if (selected_time < 0 && at >= now) {
+        const char *descriptor = string_value(member(point, "icon_descriptor"));
+        int cloud;
+        char code[49];
+        snprintf(code, sizeof code, "%s%s", bom_symbol(descriptor, &cloud),
+                 cJSON_IsTrue(member(point, "is_night")) ? "_night" : "");
+        if (selected_time < 0 && at + 3600 > now) {
             if (at > now + 3600) {
                 reason = "No current or next hourly forecast";
                 goto done;
@@ -417,42 +487,17 @@ bool home_parse_weather(const char *json, size_t len, home_weather_t *out, int64
             selected_time = at;
             parsed.forecast_at = at;
             parsed.temperature = temperature;
-            if (!metric(instant(point), "wind_speed", 0, 150, false, &parsed.wind_speed) ||
-                !metric(instant(point), "cloud_area_fraction", 0, 100, false,
-                        &parsed.cloud_cover) ||
-                !rain(point, &parsed.precipitation)) {
-                reason = "Invalid weather metric";
-                goto done;
-            }
-            const cJSON *summary = member(member(member(point, "data"), "next_1_hours"), "summary");
-            const cJSON *symbol_value = member(summary, "symbol_code");
-            if (symbol_value) {
-                const char *symbol = string_value(symbol_value);
-                if (!symbol || !*symbol || strlen(symbol) >= sizeof parsed.symbol) {
-                    reason = "Invalid forecast symbol";
-                    goto done;
-                }
-                for (const char *s = symbol; *s; ++s)
-                    if (!((*s >= 'a' && *s <= 'z') || digit((unsigned char)*s) >= 0 || *s == '_')) {
-                        reason = "Invalid forecast symbol";
-                        goto done;
-                    }
-                snprintf(parsed.symbol, sizeof parsed.symbol, "%s", symbol);
-            }
+            parsed.wind_speed = wind;
+            parsed.precipitation = amount;
+            parsed.cloud_cover = cloud >= 0 ? cloud : NAN;
+            snprintf(parsed.symbol, sizeof parsed.symbol, "%s", code);
         }
-        if (selected_time >= 0 && hours < 24 && at == selected_time + (int64_t)hours * 3600) {
-            double wind;
-            if (!rain(point, &parsed.hourly_rain[hours])) {
-                reason = "Invalid hourly precipitation";
-                goto done;
-            }
-            if (!metric(instant(point), "wind_speed", 0, 150, false, &wind)) {
-                reason = "Invalid weather metric";
-                goto done;
-            }
+        if (selected_time >= 0 && hours < HOME_WEATHER_HOURS &&
+            at == selected_time + (int64_t)hours * 3600) {
             parsed.hourly_temperature[hours] = temperature;
+            parsed.hourly_rain[hours] = amount;
             parsed.hourly_wind[hours] = (float)wind;
-            parsed.hourly_symbol[hours] = home_symbol_code(period_symbol(point, "next_1_hours"));
+            parsed.hourly_symbol[hours] = home_symbol_code(code);
             parsed.hourly_count = (uint8_t)(hours + 1);
             if (temperature < min24)
                 min24 = temperature;
@@ -460,65 +505,57 @@ bool home_parse_weather(const char *json, size_t len, home_weather_t *out, int64
                 max24 = temperature;
             ++hours;
         }
+        /* The day it falls in: wind, and a range to fall back on where the daily forecast has none. */
+        int64_t idx = local_day(zone, at, NULL) - today;
+        if (idx >= 0 && idx < HOME_WEATHER_DAYS) {
+            home_day_t *d = &parsed.day[idx];
+            d->date = (int32_t)(today + idx);
+            if (temperature < day_low[idx])
+                day_low[idx] = temperature;
+            if (temperature > day_high[idx])
+                day_high[idx] = temperature;
+            if (isfinite(wind) && (!isfinite(d->wind) || wind > d->wind))
+                d->wind = (float)wind;
+        }
     }
     if (selected_time < 0) {
         reason = "Forecast has expired";
         goto done;
     }
-    if (hours == 24) {
+    if (hours == HOME_WEATHER_HOURS) {
         parsed.low = min24;
         parsed.high = max24;
     }
-    /* Per-local-day summary. Instants give low/high/wind; rain is the interval [at, next_at)
-     * credited to the day of `at`, taken from the period that exactly spans it, so no block is
-     * counted twice. */
-    int64_t today = local_day(zone, now, NULL);
-    double noon_gap[HOME_WEATHER_DAYS];
-    double day_low[HOME_WEATHER_DAYS], day_high[HOME_WEATHER_DAYS];
-    for (unsigned i = 0; i < HOME_WEATHER_DAYS; ++i)
-        noon_gap[i] = INFINITY, day_low[i] = INFINITY, day_high[i] = -INFINITY;
-    for (const cJSON *point = series->child; point; point = point->next) {
-        int64_t at = home_parse_time(string_value(member(point, "time")));
-        int32_t offset;
-        int64_t day = local_day(zone, at, &offset), idx = day - today;
+    for (const cJSON *entry = days->child; entry; entry = entry->next) {
+        int64_t start = home_parse_time(string_value(member(entry, "date")));
+        double high, low, amount;
+        if (start < 0 || !num(entry, "temp_max", -100, 70, &high) ||
+            !num(entry, "temp_min", -100, 70, &low) || !rain_of(member(entry, "rain"), &amount)) {
+            reason = "Invalid daily forecast";
+            goto done;
+        }
+        /* "date" is the instant the local day starts. */
+        int64_t idx = local_day(zone, start, NULL) - today;
         if (idx < 0 || idx >= HOME_WEATHER_DAYS)
             continue;
         home_day_t *d = &parsed.day[idx];
-        double temperature, wind, amount = 0;
-        if (!metric(instant(point), "air_temperature", -100, 70, true, &temperature) ||
-            !metric(instant(point), "wind_speed", 0, 150, false, &wind)) {
-            reason = "Invalid weather metric";
-            goto done;
-        }
-        d->date = (int32_t)day;
-        if (temperature < day_low[idx])
-            day_low[idx] = temperature;
-        if (temperature > day_high[idx])
-            day_high[idx] = temperature;
-        if (isfinite(wind) && wind > d->wind)
-            d->wind = (float)wind;
-        if (d->samples < UINT8_MAX)
-            ++d->samples;
-        const cJSON *following = point->next;
-        int64_t next_at = following ? home_parse_time(string_value(member(following, "time"))) : -1;
-        const char *span = next_at - at == 3600 ? "next_1_hours"
-                           : next_at - at == 21600 ? "next_6_hours" : NULL;
-        if (span && period_rain(point, span, &amount) && isfinite(amount))
-            d->rain += (float)amount;
-        double gap = fabs((double)(at + offset - day * 86400 - 43200));
-        const char *code = period_symbol(point, "next_6_hours");
-        if (!code)
-            code = period_symbol(point, "next_1_hours");
-        if (code && gap < noon_gap[idx]) {
-            noon_gap[idx] = gap;
-            d->symbol = home_symbol_code(code);
-        }
+        d->date = (int32_t)(today + idx);
+        d->high = isfinite(high) ? (float)high : NAN;
+        d->low = isfinite(low) ? (float)low : NAN;
+        d->rain = (float)amount;
+        d->symbol = home_symbol_code(bom_symbol(string_value(member(entry, "icon_descriptor")), NULL));
+        d->samples = 24;
     }
     for (unsigned i = 0; i < HOME_WEATHER_DAYS; ++i) {
-        if (!parsed.day[i].samples)
+        home_day_t *d = &parsed.day[i];
+        if (!d->date)
             break;
-        parsed.day[i].low = (float)day_low[i];
-        parsed.day[i].high = (float)day_high[i];
+        if (!isfinite(d->high) && day_high[i] > -INFINITY)
+            d->high = (float)day_high[i];
+        if (!isfinite(d->low) && day_low[i] < INFINITY)
+            d->low = (float)day_low[i];
+        if (!isfinite(d->high) || !isfinite(d->low))
+            break;
         parsed.day_count = (uint8_t)(i + 1);
     }
     parsed.meta.valid = true;
@@ -527,6 +564,7 @@ bool home_parse_weather(const char *json, size_t len, home_weather_t *out, int64
         error[0] = '\0';
     ok = true;
 done:
-    cJSON_Delete(root);
+    cJSON_Delete(hroot);
+    cJSON_Delete(droot);
     return ok ? true : fail(error, reason);
 }

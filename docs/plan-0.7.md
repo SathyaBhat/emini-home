@@ -74,6 +74,20 @@ Builds use ESP-IDF v6.0 from `~/esp/esp-idf-v6.0`. Nothing is committed yet. The
   rain threshold is a constant (`RAIN_HOUR_MM`) until step 5 adds the config; footer is one line now;
   Chinese strings fall back to English, `明天` untested in the 22 px CJK table.
 
+**Weather source: Bureau of Meteorology instead of met.no (done after step 4).**
+- `home_fetch_weather()` now fetches `api.weather.bom.gov.au/v1/locations/<geohash>/forecasts/hourly` and
+  `/daily` (geohash of 6 characters computed on the device by `home_geohash()`); `home_parse_weather()` takes
+  both bodies. BOM sends no ETag, so every poll is a full pair (about 40 KB + 8 KB before gzip).
+- BOM icon descriptors map to the met.no symbol codes the renderer already uses (`bom_icons[]`); haze and dust
+  show as fair. Rain is the middle of BOM's min..max range, wind is kept in km/h, as BOM sends it, everywhere (store, screens, thresholds); only the Weather screen's sky animation divides by 3.6. Cloud cover is guessed from the
+  icon. Day low/high come from the daily forecast, with the hourly range where BOM has none (today after the
+  maximum has passed).
+- Footer now says "Bureau of Meteorology". Checked on the unit (Acacia Gardens, `r65245`): status ready,
+  `day_count` 6, Today preview shows BOM values.
+- **Caveats:** the API is undocumented and BOM's copyright line says it must not be used or shared, so this is
+  for personal use only; it covers Australia only. `docs/PRIVACY.md`, README attribution and `HOME_UA` still
+  say met.no or emini (step 7). The Weather screen and `rain_outlook()` are untested with BOM data.
+
 **Open items from step 2.**
 - The Today skeleton on paper has not been looked at.
 - Importing a 0.6 recipe in the real panel is untried (only checked in node).
@@ -239,14 +253,14 @@ nothing needs doing. Otherwise up to 3 chips (122×28 at x 264, y 4/36/68) plus 
 | Alert | Condition | Level |
 |---|---|---|
 | Rain | any hour ≥ `rain_hour` (4 mm/h) or 12 h sum ≥ `rain_sum` (10 mm); evening: tomorrow's sum | warn |
-| Wind | highest sustained in the next 12 h (evening: tomorrow) ≥ `wind` (10 m/s) | warn |
+| Wind | highest sustained in the next 12 h (evening: tomorrow) ≥ `wind` (36 km/h) | warn |
 | Home battery low | pushed percent ≤ `home_low_pct` (20), only while fresh | warn |
 | Pushed lines | only while fresh; stale lines are dropped | as sent |
 | UV | only with `alerts_air`; today's max ≥ 6 | info |
 | Pollen | only with `alerts_air`; level ≥ high | info |
 | Old weather | source in error, or > 6 h since the last good fetch | outline chip |
 
-Config: `uint16_t rain_sum_x10, rain_hour_x10, wind_x10; bool alerts_air;`.
+Config: `uint16_t rain_sum_x10, rain_hour_x10, wind_kmh; bool alerts_air;`.
 
 Pure module `home_alerts.c/.h`:
 
@@ -350,7 +364,7 @@ y 0 ┌────────────────────────�
 ```
   6 │ TOMORROW · THU 8 OCT             22px             │ ALERT CORNER     │
  40 │ [icon 64]  16° 64px  / 9° 30px                     │ (tomorrow and    │
-112 │ Rain 4 mm · wind 7 m/s           22px              │  overnight)      │
+112 │ Rain 4 mm · wind 25 km/h           22px              │  overnight)      │
 140 │ Sunrise 07:04                    16px                                 │
 166 ├────────────────────────────────────────────────────────────────────────┤
 170 │  FRI        SAT        SUN        MON       16px, 4 columns × 93 px  │
@@ -421,7 +435,7 @@ never persisted and migration lives entirely in `home_config_decode()` (`home_co
   "bins": {"weekday": 1, "reference": "2026-10-06", "from": "17:00", "until": "19:00",
            "list": [{"colour": "red", "every": 1, "week": 0, "label": ""},
                     {"colour": "yellow", "every": 2, "week": 0, "label": ""}]},
-  "alerts": {"rain_mm": 10, "rain_mm_h": 4, "wind_ms": 10, "air": false},
+  "alerts": {"rain_mm": 10, "rain_mm_h": 4, "wind_kmh": 36, "air": false},
   "home": {"stale_min": 180, "low_pct": 20}
   ```
 
@@ -430,7 +444,7 @@ never persisted and migration lives entirely in `home_config_decode()` (`home_co
 - **Defaults** (69-110):
   - today, weather and note enabled; `fixed_screen` today; `day_screen` {today, note, today};
   - `evening_minute` 1080; bins off;
-  - thresholds 10 mm / 4 mm/h / 10 m/s; `home_stale_min` 180; `home_low_pct` 20.
+  - thresholds 10 mm / 4 mm/h / 36 km/h; `home_stale_min` 180; `home_low_pct` 20.
 - **Readiness** (`home_auto_screen()`, 563-584): Today is ready when `location_ready || bin_count
   || home.battery_at`.
 - **Data cache** (`home_store.c:16-20, 129-148, 190-208`):

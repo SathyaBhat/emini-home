@@ -96,17 +96,17 @@ typedef enum {
 #define HOME_WEATHER_DAYS 6 /* today + 5 */
 typedef struct {
     int32_t date; /* local civil day (days since 1970-01-01); 0 = empty */
-    float low, high, rain, wind;
+    float low, high, rain, wind; /* wind in km/h */
     uint8_t symbol, samples; /* samples < 4 = partial day */
 } home_day_t;
 typedef struct {
     home_source_meta_t meta;
     int64_t forecast_at; /* validity time of temperature/hourly[0], separate from model issue */
-    double temperature, low, high, precipitation, wind_speed, cloud_cover;
+    double temperature, low, high, precipitation, wind_speed, cloud_cover; /* wind_speed in km/h */
     char symbol[49];
     double hourly_temperature[HOME_WEATHER_HOURS], hourly_rain[HOME_WEATHER_HOURS];
     uint8_t hourly_count;
-    float hourly_wind[HOME_WEATHER_HOURS]; /* NAN when absent */
+    float hourly_wind[HOME_WEATHER_HOURS]; /* km/h, NAN when absent */
     uint8_t hourly_symbol[HOME_WEATHER_HOURS];
     home_day_t day[HOME_WEATHER_DAYS];
     uint8_t day_count;

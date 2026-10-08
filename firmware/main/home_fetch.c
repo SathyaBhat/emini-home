@@ -27,7 +27,7 @@
 #define LINE_MAX_BYTES 8192U /* GitHub Atom sends a ~3.6KiB CSP header. */
 #define REQUEST_US INT64_C(25000000)
 /* Public source repository is a contact pointer, never a user/device identifier. */
-#define HOME_UA "emini-home/0.6 (+https://github.com/fiedoruk/emini-home)"
+#define HOME_UA "emini-home/0.7 (+https://github.com/fiedoruk/emini-home)"
 /* Shortest gap between two questions to the same provider, whatever it says about freshness. */
 #define HOME_MIN_POLL_S 1800
 typedef struct {
@@ -973,37 +973,38 @@ esp_err_t home_fetch_weather(const home_config_t *c, home_weather_t *w, int64_t 
 {
     if (now < 1704067200 || now < w->meta.next_fetch)
         return ESP_ERR_INVALID_STATE;
-    char url[192];
-    double lat = round(c->latitude * 10000.0) / 10000.0,
-           lon = round(c->longitude * 10000.0) / 10000.0;
-    snprintf(url, sizeof(url),
-             "https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=%.4f&lon=%.4f", lat,
-             lon);
-    home_source_meta_t validators = w->meta;
-    /* We cache a selected forecast, not the provider's entire series. A 304
-     * cannot re-select a later hour from data we no longer hold. Respect the
-     * HTTP expiry above, then request the body when this selection is past. */
-    if (w->forecast_at < now) {
-        validators.etag[0] = 0;
-        validators.last_modified[0] = 0;
-    }
-    headers_t h = {0};
-    char *body = NULL;
-    size_t size = 0;
-    esp_err_t e = fetch(url, &validators, &h, &body, &size);
-    if (e == ESP_OK && h.status == 304) {
-        if (w->forecast_at < now) {
-            failed(&w->meta, &h, now, "Forecast selection expired");
-            return ESP_FAIL;
+    /* Bureau of Meteorology: an hourly and a daily forecast for the location (geohash) that
+     * contains the coordinates. BOM sends no ETag, so there is nothing to revalidate; the poll
+     * floor in metadata() keeps this to a request pair every half hour or so. */
+    char geohash[8], hourly_url[128], daily_url[128];
+    home_geohash(c->latitude, c->longitude, geohash, 6);
+    snprintf(hourly_url, sizeof hourly_url,
+             "https://api.weather.bom.gov.au/v1/locations/%s/forecasts/hourly", geohash);
+    snprintf(daily_url, sizeof daily_url,
+             "https://api.weather.bom.gov.au/v1/locations/%s/forecasts/daily", geohash);
+    home_source_meta_t none = w->meta;
+    none.etag[0] = 0;
+    none.last_modified[0] = 0;
+    headers_t h = {0}, dh = {0};
+    char *hourly = NULL, *daily = NULL;
+    size_t hourly_size = 0, daily_size = 0;
+    esp_err_t e = fetch(hourly_url, &none, &h, &hourly, &hourly_size);
+    if (e == ESP_OK && h.status != 200)
+        e = ESP_FAIL;
+    if (e == ESP_OK) {
+        e = fetch(daily_url, &none, &dh, &daily, &daily_size);
+        if (e == ESP_OK && dh.status != 200) {
+            h.status = dh.status;
+            e = ESP_FAIL;
         }
-        metadata(&w->meta, &h, now, false);
-        return ESP_OK;
     }
     char error[97] = "Weather connection failed";
     home_weather_t candidate;
-    if (e == ESP_OK && !home_parse_weather(body, size, &candidate, now, c->timezone, error))
+    if (e == ESP_OK && !home_parse_weather(hourly, hourly_size, daily, daily_size, &candidate, now,
+                                           c->timezone, error))
         e = ESP_FAIL;
-    free(body);
+    free(hourly);
+    free(daily);
     if (e == ESP_OK) {
         int64_t issue = candidate.meta.issued_at;
         candidate.meta = w->meta;
