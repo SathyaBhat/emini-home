@@ -407,7 +407,7 @@
     const s = status && status.sources;
     if (!s || typeof s !== "object") return null;
     return JSON.stringify(
-      ["weather", "air"].map((k) => [
+      ["weather"].map((k) => [
         s[k]?.fetched_at ?? null,
         s[k]?.valid ?? null,
       ]),
@@ -558,8 +558,19 @@
           (c.alerts &&
             typeof c.alerts === "object" &&
             !Array.isArray(c.alerts) &&
-            Object.keys(c.alerts).every((k) => k === "air") &&
-            (c.alerts.air === undefined || typeof c.alerts.air === "boolean")),
+            Object.keys(c.alerts).every((k) =>
+              ["air", "rain_mm", "rain_mm_h", "wind_kmh"].includes(k),
+            ) &&
+            (c.alerts.air === undefined || typeof c.alerts.air === "boolean") &&
+            ["rain_mm", "rain_mm_h"].every(
+              (k) =>
+                c.alerts[k] === undefined ||
+                (Number.isFinite(c.alerts[k]) && c.alerts[k] >= 0 && c.alerts[k] <= 500),
+            ) &&
+            (c.alerts.wind_kmh === undefined ||
+              (Number.isInteger(c.alerts.wind_kmh) &&
+                c.alerts.wind_kmh >= 0 &&
+                c.alerts.wind_kmh <= 300))),
       );
       const b = c.bins;
       const hm = (x) =>

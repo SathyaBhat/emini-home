@@ -50,7 +50,8 @@ typedef struct {
     uint16_t interval_min, pause_min;
     uint16_t cycle_min; /* "In turn": minutes per composition while a screen stays */
     uint8_t ok_action;  /* short OK/BOOT: 0 the "emini" card, 1 refresh, 2 hold, 3 setup window */
-    bool alerts_air;    /* fetch Open-Meteo air quality for the UV and pollen alerts */
+    uint16_t rain_sum_x10, rain_hour_x10; /* rain alert: mm over the window, mm in one hour, x10 */
+    uint16_t wind_kmh;                    /* wind alert */
     uint8_t brush;      /* tone structure: 0 grain, 1 halftone, 2 grid */
     uint8_t power_mode; /* home_power_mode_t */
     bool quiet_enabled;
@@ -97,6 +98,7 @@ typedef enum {
 typedef struct {
     int32_t date; /* local civil day (days since 1970-01-01); 0 = empty */
     float low, high, rain, wind; /* wind in km/h */
+    float uv; /* highest UV index of the day, NAN when BOM gives none */
     uint8_t symbol, samples; /* samples < 4 = partial day */
 } home_day_t;
 typedef struct {
@@ -111,32 +113,8 @@ typedef struct {
     home_day_t day[HOME_WEATHER_DAYS];
     uint8_t day_count;
 } home_weather_t;
-/* Open-Meteo Air Quality. Index 0 is the last full hour at or before now and is
- * never more than one hour behind it; up to 24 hours are kept from there. An
- * absent series, a JSON null and a physically impossible number all yield NAN
- * (-1 for the integer indices). Pollen is null outside Europe, so pollen[] is
- * NAN there. meta.issued_at is the hour of index 0: the response carries no
- * model issue time of its own. Parser and levels: home_air.h. */
-#define HOME_AIR_HOURS 24
-#define HOME_POLLEN_COUNT 4
-enum {
-    HOME_POLLEN_ALDER = 0,
-    HOME_POLLEN_BIRCH = 1,
-    HOME_POLLEN_GRASS = 2,
-    HOME_POLLEN_MUGWORT = 3
-};
-typedef struct {
-    home_source_meta_t meta;
-    int64_t forecast_at; /* UTC full hour of index 0 */
-    double hourly_pm2_5[HOME_AIR_HOURS], hourly_uv[HOME_AIR_HOURS]; /* NAN when absent */
-    uint8_t hourly_count;
-    double pm2_5, pm10, uv_index; /* hour of index 0 */
-    int16_t european_aqi, us_aqi; /* -1 when absent */
-    double pollen[HOME_POLLEN_COUNT]; /* alder, birch, grass, mugwort */
-} home_air_t;
 typedef struct {
     home_weather_t weather;
-    home_air_t air;
 } home_data_t;
 
 /* Counters kept across restarts, written at most once every few minutes. */

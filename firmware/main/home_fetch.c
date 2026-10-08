@@ -1,6 +1,5 @@
 #include "home_fetch.h"
 #include "home_parse.h"
-#include "home_air.h"
 #include "esp_tls.h"
 #include "esp_crt_bundle.h"
 #include "esp_timer.h"
@@ -1015,60 +1014,6 @@ esp_err_t home_fetch_weather(const home_config_t *c, home_weather_t *w, int64_t 
         if (h.status && h.status != 200)
             snprintf(error, sizeof(error), "Weather HTTP %d", h.status);
         failed(&w->meta, &h, now, error);
-    }
-    return e;
-}
-esp_err_t home_fetch_air(const home_config_t *c, home_air_t *a, int64_t now)
-{
-    if (!c->location_ready || now < 1704067200 || now < a->meta.next_fetch)
-        return ESP_ERR_INVALID_STATE;
-    char url[288];
-    double lat = round(c->latitude * 10000.0) / 10000.0,
-           lon = round(c->longitude * 10000.0) / 10000.0;
-    int length = snprintf(url, sizeof(url),
-                          "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=%.4f&"
-                          "longitude=%.4f&hourly=pm2_5,pm10,european_aqi,us_aqi,uv_index,"
-                          "alder_pollen,birch_pollen,grass_pollen,mugwort_pollen&forecast_days=2&"
-                          "timezone=UTC",
-                          lat, lon);
-    if (length < 0 || length >= (int)sizeof(url))
-        return ESP_ERR_INVALID_SIZE;
-    home_source_meta_t validators = a->meta;
-    /* We keep a selected window, not the provider's whole series. A 304 cannot
-     * move that window to a later hour, so once the selected hour has passed we
-     * ask for the body again. */
-    if (a->forecast_at + 3600 <= now) {
-        validators.etag[0] = 0;
-        validators.last_modified[0] = 0;
-    }
-    headers_t h = {0};
-    char *body = NULL;
-    size_t size = 0;
-    esp_err_t e =
-        fetch_scoped(url, &validators, &h, &body, &size, "air-quality-api.open-meteo.com");
-    if (e == ESP_OK && h.status == 304) {
-        if (a->forecast_at + 3600 <= now) {
-            failed(&a->meta, &h, now, "Air selection expired");
-            return ESP_FAIL;
-        }
-        metadata(&a->meta, &h, now, false);
-        return ESP_OK;
-    }
-    char error[97] = "Air connection failed";
-    home_air_t candidate;
-    if (e == ESP_OK && !home_parse_air(body, size, &candidate, now, error))
-        e = ESP_FAIL;
-    free(body);
-    if (e == ESP_OK) {
-        int64_t issue = candidate.meta.issued_at;
-        candidate.meta = a->meta;
-        candidate.meta.issued_at = issue;
-        metadata(&candidate.meta, &h, now, true);
-        *a = candidate;
-    } else {
-        if (h.status && h.status != 200)
-            snprintf(error, sizeof(error), "Air HTTP %d", h.status);
-        failed(&a->meta, &h, now, error);
     }
     return e;
 }

@@ -447,7 +447,8 @@ bool home_parse_weather(const char *hourly, size_t hourly_len, const char *daily
         parsed.hourly_wind[i] = NAN;
     }
     for (unsigned i = 0; i < HOME_WEATHER_DAYS; ++i)
-        parsed.day[i].low = parsed.day[i].high = parsed.day[i].rain = parsed.day[i].wind = NAN;
+        parsed.day[i].low = parsed.day[i].high = parsed.day[i].rain = parsed.day[i].wind =
+            parsed.day[i].uv = NAN;
     const cJSON *series = member(hroot, "data"), *days = member(droot, "data");
     if (!hroot || !droot) {
         reason = "Malformed weather JSON";
@@ -544,6 +545,10 @@ bool home_parse_weather(const char *hourly, size_t hourly_len, const char *daily
         d->low = isfinite(low) ? (float)low : NAN;
         d->rain = (float)amount;
         d->symbol = home_symbol_code(bom_symbol(string_value(member(entry, "icon_descriptor")), NULL));
+        const cJSON *uvo = member(entry, "uv");
+        double uv;
+        if (cJSON_IsObject(uvo) && num(uvo, "max_index", 0, 30, &uv) && isfinite(uv))
+            d->uv = (float)uv;
         d->samples = 24;
     }
     for (unsigned i = 0; i < HOME_WEATHER_DAYS; ++i) {

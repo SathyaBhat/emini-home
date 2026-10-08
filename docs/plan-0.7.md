@@ -16,7 +16,7 @@ Builds use ESP-IDF v6.0 from `~/esp/esp-idf-v6.0`. Nothing is committed yet. The
 | 2 Lineup and schema 2 | **Done, flashed, checked** | See below. |
 | 3 Bins | **Done, flashed, checked** (panel editor untried in a browser) | See below. |
 | 4 Today layouts | **Flashed, evening seen in preview** | App-only flash, hash verified. Evening layout looked right in `/api/preview`; day layout, bins window, paper and -12 degrees not yet seen. See below. |
-| 5 Alerts corner | Not started | `uv_level`/`pollen_level` were deleted with Air; recreate them in `home_alerts.c`. |
+| 5 Alerts corner | **Built, not flashed** | See below. Battery-low and pushed-line chips wait for step 6. |
 | 6 Push | Not started | |
 | 7 Clean-up | Not started | Version still reads 0.6.2. |
 | 8 Rename to Inifuss | Not started | |
@@ -87,6 +87,25 @@ Builds use ESP-IDF v6.0 from `~/esp/esp-idf-v6.0`. Nothing is committed yet. The
 - **Caveats:** the API is undocumented and BOM's copyright line says it must not be used or shared, so this is
   for personal use only; it covers Australia only. `docs/PRIVACY.md`, README attribution and `HOME_UA` still
   say met.no or emini (step 7). The Weather screen and `rain_outlook()` are untested with BOM data.
+
+**Step 5, what is in (built only).**
+- **Module:** `home_alerts.c/.h`, pure, host-checked with a synthetic forecast (rain per hour and per 12 h, wind, UV,
+  pollen, old weather, ordering warn > info > outline, `+N` overflow, quiet when nothing is reached). Evening looks at
+  tomorrow's `day[]` rain and wind; UV is skipped in the evening (the air series reaches only 24 h).
+- **Config:** `alerts` block now `{air, rain_mm, rain_mm_h, wind_kmh}` (defaults 10 / 4 / 36; 0 turns a limit off); stored
+  as `rain_sum_x10`, `rain_hour_x10`, `wind_kmh`. Missing keys keep the default, so older records load.
+- **Render:** `alert_corner()` draws up to 3 chips at x 264 (red, yellow with border, outline) and `+N`; the rain bars and
+  the day-column mark now use the household's thresholds instead of the constant.
+- **UV from BOM, Open-Meteo air quality removed:** BOM's daily forecast has `uv.max_index`; it is parsed into
+  `home_day_t.uv` and gives the UV chip (today by day, tomorrow in the evening). Pollen is dropped. Gone with it:
+  `home_air_t`, `home_parse_air.c`, `home_fetch_air()`, `alerts_air`, wake bit 4, the `air` source in status and
+  `/api/refresh` (`all` is now mask 1), and the panel checkbox. A saved `alerts.air` key is still accepted and ignored.
+  The cached-data record changes size, so it is dropped once on first boot. The panel's town search still uses
+  Open-Meteo geocoding from the phone. README, PANEL and PRIVACY still describe the air fetch (step 7).
+- **Thresholds I chose:** UV >= 6, old weather > 6 h. Change in `home_alerts.h`.
+- **Panel:** Alerts fields (rain per 12 h, per hour, wind) in the Today editor, `validate()` mirrors the limits.
+  Syntax-checked only.
+- **Build:** 0x39e570 bytes, 8% of the slot free. Not flashed; chips not yet seen on paper.
 
 **Open items from step 2.**
 - The Today skeleton on paper has not been looked at.

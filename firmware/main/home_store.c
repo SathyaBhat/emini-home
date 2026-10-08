@@ -140,7 +140,6 @@ esp_err_t home_store_init(home_config_t *c, home_data_t *d, home_secrets_t *s)
             if (cache->latitude == c->latitude && cache->longitude == c->longitude &&
                 !strcmp(cache->timezone, c->timezone)) {
                 d->weather = cache->data.weather;
-                d->air = cache->data.air;
             }
         }
         free(p);
@@ -166,7 +165,6 @@ esp_err_t home_store_init(home_config_t *c, home_data_t *d, home_secrets_t *s)
     s->ap_password[16] = 0;
     s->ap_ssid[32] = 0;
     d->weather.meta.error[96] = 0;
-    d->air.meta.error[96] = 0;
     return ESP_OK;
 }
 esp_err_t home_store_config(const home_config_t *c)
@@ -193,8 +191,6 @@ esp_err_t home_store_data(const home_data_t *d, const home_config_t *c)
     p->data = *d;
     if (p->data.weather.meta.no_store)
         memset(&p->data.weather, 0, sizeof(p->data.weather));
-    if (p->data.air.meta.no_store)
-        memset(&p->data.air, 0, sizeof(p->data.air));
     esp_err_t e = put(1, p, sizeof(*p));
     free(p);
     return e;

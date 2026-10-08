@@ -96,9 +96,12 @@
       threeScreens: "3 kinds of information",
       today: "Today",
       todayDesc: "The day at a glance",
-      alertsAir: "UV & pollen from Open-Meteo (sends your place)",
-      alertsAirHelp:
-        "Adds a note to the top corner when UV or pollen is high. Off, nothing is sent.",
+      alertsHeading: "Alerts",
+      alertRain: "Rain over 12 hours (mm)",
+      alertRainHour: "Rain in one hour (mm)",
+      alertWind: "Wind (km/h)",
+      alertsHelp:
+        "The top corner of Today shows a chip when a limit is reached, and nothing otherwise. 0 turns a limit off.",
       evening: "Show tomorrow from",
       eveningHelp: "From this time Today shows tomorrow's weather and the days after it.",
       binsHeading: "Bin collection",
@@ -1036,7 +1039,7 @@
         { weekday: "long", timeZone: "UTC" },
       ),
     ]);
-    return `${check("alerts.air", "alertsAir")}<p class="hint">${t("alertsAirHelp")}</p>${field("evening", "evening", "time")}<p class="hint">${t("eveningHelp")}</p><h3>${t("binsHeading")}</h3><p class="hint">${t("binsHelp")}</p><label class="field"><span>${t("binWeekday")}</span><select data-path="bins.weekday" data-num>${options(days, b.weekday)}</select></label>${field("bins.reference", "binReference", "date", 'min="2000-01-01" max="2100-12-31"')}<div class="row">${field("bins.from", "binFrom", "time")}${field("bins.until", "binUntil", "time")}</div>${binRows()}${b.list.length < 3 ? `<button data-action="bin-add">${t("binAdd")}</button>` : ""}${binsNextList()}`;
+    return `<h3>${t("alertsHeading")}</h3><p class="hint">${t("alertsHelp")}</p>${field("alerts.rain_mm", "alertRain", "number", 'min="0" max="500" step="0.5" inputmode="decimal"')}${field("alerts.rain_mm_h", "alertRainHour", "number", 'min="0" max="500" step="0.5" inputmode="decimal"')}${field("alerts.wind_kmh", "alertWind", "number", 'min="0" max="300" step="1" inputmode="numeric"')}${field("evening", "evening", "time")}<p class="hint">${t("eveningHelp")}</p><h3>${t("binsHeading")}</h3><p class="hint">${t("binsHelp")}</p><label class="field"><span>${t("binWeekday")}</span><select data-path="bins.weekday" data-num>${options(days, b.weekday)}</select></label>${field("bins.reference", "binReference", "date", 'min="2000-01-01" max="2100-12-31"')}<div class="row">${field("bins.from", "binFrom", "time")}${field("bins.until", "binUntil", "time")}</div>${binRows()}${b.list.length < 3 ? `<button data-action="bin-add">${t("binAdd")}</button>` : ""}${binsNextList()}`;
   }
   function editor() {
     const s = S.selected,
@@ -1361,7 +1364,7 @@
      empty list, with a Tuesday reference so the block is valid as soon as a bin is added. */
   const withAlerts = (c) => ({
     ...c,
-    alerts: c.alerts || { air: false },
+    alerts: { rain_mm: 10, rain_mm_h: 4, wind_kmh: 36, ...c.alerts },
     evening: c.evening || "18:00",
     bins: c.bins || {
       weekday: 1,

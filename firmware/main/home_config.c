@@ -115,6 +115,9 @@ void home_config_defaults(home_config_t *c)
     c->bin_reference = 5; /* 1970-01-06 */
     c->bins_from = 1020;
     c->bins_until = 1140;
+    c->rain_sum_x10 = 100;
+    c->rain_hour_x10 = 40;
+    c->wind_kmh = 36;
     c->evening_minute = 1080;
 }
 static bool unique(const cJSON *n, int depth)
@@ -328,8 +331,23 @@ bool home_config_decode(const char *text, size_t len, home_config_t *out, const 
         REQUIRE(!get(j, "feed_url") || cJSON_IsString(get(j, "feed_url")), "Invalid feed URL");
         if (get(j, "alerts")) { /* optional since 0.7; a household fact, not a recipe key */
             cJSON *al = get(j, "alerts");
-            static const char *const akeys[] = {"air"};
-            REQUIRE(known(al, akeys, 1) && boolean(al, "air", &c.alerts_air), "Invalid alerts");
+            /* "air" went with the Open-Meteo air quality fetch; a record from this branch has it. */
+            static const char *const akeys[] = {"air", "rain_mm", "rain_mm_h", "wind_kmh"};
+            double mm;
+            REQUIRE(known(al, akeys, 4) && (!get(al, "air") || cJSON_IsBool(get(al, "air"))),
+                    "Invalid alerts");
+            if (get(al, "rain_mm")) {
+                REQUIRE(number(al, "rain_mm", 0, 500, &mm), "Invalid rain alert");
+                c.rain_sum_x10 = (uint16_t)(mm * 10 + 0.5);
+            }
+            if (get(al, "rain_mm_h")) {
+                REQUIRE(number(al, "rain_mm_h", 0, 500, &mm), "Invalid rain alert");
+                c.rain_hour_x10 = (uint16_t)(mm * 10 + 0.5);
+            }
+            if (get(al, "wind_kmh")) {
+                REQUIRE(integer(al, "wind_kmh", 0, 300, &n), "Invalid wind alert");
+                c.wind_kmh = (uint16_t)n;
+            }
         }
         if (get(j, "evening")) /* optional since 0.7; a household fact, not a recipe key */
             REQUIRE(hm(j, "evening", &c.evening_minute), "Invalid evening time");
@@ -577,7 +595,9 @@ cJSON *home_config_json(const home_config_t *c, bool recipe)
         JSON_NEED(cJSON_AddStringToObject(j, "note", c->note));
         cJSON *alerts = cJSON_AddObjectToObject(j, "alerts");
         JSON_NEED(alerts);
-        JSON_NEED(cJSON_AddBoolToObject(alerts, "air", c->alerts_air));
+        JSON_NEED(cJSON_AddNumberToObject(alerts, "rain_mm", c->rain_sum_x10 / 10.0));
+        JSON_NEED(cJSON_AddNumberToObject(alerts, "rain_mm_h", c->rain_hour_x10 / 10.0));
+        JSON_NEED(cJSON_AddNumberToObject(alerts, "wind_kmh", c->wind_kmh));
         addhm(j, "evening", c->evening_minute);
         JSON_NEED(get(j, "evening"));
         cJSON *bins = cJSON_AddObjectToObject(j, "bins");

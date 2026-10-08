@@ -351,8 +351,7 @@ static esp_err_t status(httpd_req_t *r, int token)
              cJSON_AddNumberToObject(power, "free_s", (double)pw.free_s);
 
         cJSON *sources = ok ? cJSON_AddObjectToObject(j, "sources") : NULL;
-        ok = ok && sources && json_child(sources, "weather", weather_json(&h->data.weather)) &&
-             json_child(sources, "air", meta_json(&h->data.air.meta));
+        ok = ok && sources && json_child(sources, "weather", weather_json(&h->data.weather));
         cJSON *next = ok ? cJSON_AddArrayToObject(j, "bins_next") : NULL;
         ok = ok && next;
         struct tm lt;
@@ -457,8 +456,6 @@ static esp_err_t preview(httpd_req_t *r, const char *draft, bool confirmed, bool
         if (parsed.latitude != c->latitude || parsed.longitude != c->longitude ||
             strcmp(parsed.timezone, c->timezone))
             memset(&d->weather, 0, sizeof(d->weather));
-        if (!parsed.alerts_air)
-            memset(&d->air, 0, sizeof(d->air));
         *c = parsed;
     }
     if (!confirmed) {
@@ -588,12 +585,9 @@ static esp_err_t api_inner(httpd_req_t *r)
             c.latitude != home_runtime.config.latitude ||
             c.longitude != home_runtime.config.longitude) {
             memset(&home_runtime.data.weather, 0, sizeof(home_runtime.data.weather));
-            memset(&home_runtime.data.air, 0, sizeof(home_runtime.data.air));
         }
         if (strcmp(c.timezone, home_runtime.config.timezone))
             memset(&home_runtime.data.weather, 0, sizeof(home_runtime.data.weather));
-        if (!c.alerts_air)
-            memset(&home_runtime.data.air, 0, sizeof(home_runtime.data.air));
         home_runtime.refresh_requested &= home_sources_wanted(&c);
         home_runtime.config = c;
         home_runtime.request_id++; /* Save changes settings; explicit Show publishes them. */
@@ -745,14 +739,11 @@ static esp_err_t api_inner(httpd_req_t *r)
     if (!strcmp(path, "/api/refresh")) {
         cJSON *v = cJSON_GetObjectItemCaseSensitive(j, "source");
         if (!only(j, "source", NULL) || !cJSON_IsString(v) ||
-            (strcmp(v->valuestring, "weather") && strcmp(v->valuestring, "air") &&
-             strcmp(v->valuestring, "all"))) {
+            (strcmp(v->valuestring, "weather") && strcmp(v->valuestring, "all"))) {
             result = error(r, "400 Bad Request", "Unknown source");
             goto done;
         }
-        unsigned mask = !strcmp(v->valuestring, "weather") ? 1U
-                        : !strcmp(v->valuestring, "air")   ? 4U
-                                                           : 5U;
+        unsigned mask = 1U;
         home_lock();
         /* Only a source that is switched on and has a place is asked. */
         mask &= home_sources_wanted(&home_runtime.config);

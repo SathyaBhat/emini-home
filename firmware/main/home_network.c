@@ -635,8 +635,6 @@ void home_sources_task(void *unused)
          * it rather than walk around it. */
         if (home_runtime.refresh_requested & 1U)
             home_runtime.data.weather.meta.next_fetch = 0;
-        if (home_runtime.refresh_requested & 4U)
-            home_runtime.data.air.meta.next_fetch = 0;
         *c = home_runtime.config;
         *d = home_runtime.data;
         int32_t offset;
@@ -692,13 +690,13 @@ void home_sources_task(void *unused)
          * of waking it again. Not after a failure - that source keeps its own pause. The fetch
          * functions check next_fetch themselves, hence zero on this copy. */
         if (c->power_mode == HOME_POWER_BREATH) {
-            home_source_meta_t *m[] = {&d->weather.meta, &d->air.meta};
+            home_source_meta_t *m[] = {&d->weather.meta};
             for (size_t i = 0; i < sizeof m / sizeof m[0]; i++)
                 if (!m[i]->error[0] && now + HOME_BATCH_S >= m[i]->next_fetch)
                     m[i]->next_fetch = 0;
         }
         /* Only screens that are switched on: a screen nobody shows must not send the place or
-         * anywhere (air only with the UV and pollen alerts on, since 0.7). */
+         * anywhere. */
         unsigned wanted = home_sources_wanted(c);
         bool changed = false;
         if ((wanted & 1U) && now >= d->weather.meta.next_fetch) {
@@ -716,28 +714,12 @@ void home_sources_task(void *unused)
             }
             home_unlock();
         }
-        /* Same worker, so never two connections at once. */
-        if ((wanted & 4U) && now >= d->air.meta.next_fetch) {
-            home_fetch_air(c, &d->air, now);
-            home_lock();
-            if (home_runtime.config.latitude == c->latitude &&
-                home_runtime.config.longitude == c->longitude &&
-                home_runtime.config.alerts_air) {
-                home_runtime.data.air = d->air;
-                home_runtime.counters.fetches++;
-                home_runtime.refresh_requested &= ~4U;
-                home_runtime.dirty = true;
-                home_runtime.request_id++;
-                changed = true;
-            }
-            home_unlock();
-        }
         if (changed) {
             home_lock();
             esp_err_t e = home_store_data(&home_runtime.data, &home_runtime.config);
             home_unlock();
-            ESP_LOGI(TAG, "Source cycle complete; weather=%d air=%d persistence=%s",
-                     d->weather.meta.state, d->air.meta.state,
+            ESP_LOGI(TAG, "Source cycle complete; weather=%d persistence=%s",
+                     d->weather.meta.state,
                      esp_err_to_name(e));
         }
         home_lock();

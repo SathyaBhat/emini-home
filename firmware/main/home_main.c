@@ -250,7 +250,7 @@ static void action(int key)
             home_begin_pairing();
             ESP_LOGI(TAG, "Physical short release key=4: setup window");
             return;
-        } else if (what == 1) { /* fetch weather, the headline and the air now */
+        } else if (what == 1) { /* fetch the weather now */
             home_runtime.force_show = true;
             home_runtime.refresh_requested |= home_sources_wanted(&home_runtime.config);
             pause = false;
@@ -673,15 +673,13 @@ void home_loop_step(void)
         if (log_hour && (stored = home_store_power(&log_copy)) != ESP_OK)
             ESP_LOGW(TAG, "Power log not saved: %s", esp_err_to_name(stored));
         home_lock();
-        home_source_meta_t *meta[] = {&home_runtime.data.weather.meta,
-                                      &home_runtime.data.air.meta};
-        for (int i = 0; i < 2; i++)
-            if (meta[i]->valid && meta[i]->expires_at < now && meta[i]->state == HOME_READY) {
-                meta[i]->state = HOME_STALE;
-                home_runtime.dirty = true;
-                home_runtime.request_id++;
-                dirty = true;
-            }
+        home_source_meta_t *meta = &home_runtime.data.weather.meta;
+        if (meta->valid && meta->expires_at < now && meta->state == HOME_READY) {
+            meta->state = HOME_STALE;
+            home_runtime.dirty = true;
+            home_runtime.request_id++;
+            dirty = true;
+        }
         *d = home_runtime.data;
         home_unlock();
         if (now % 3600 < 60)

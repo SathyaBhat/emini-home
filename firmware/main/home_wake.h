@@ -27,7 +27,7 @@ typedef struct {
 
 bool home_radio_wanted(const home_radio_in_t *in);
 
-/* The sources worth asking for, as the refresh bits (1 weather, 2 headline, 4 air): a screen that
+/* The sources worth asking for, as the refresh bits (1 weather): a screen that
  * is switched on and has what it needs, a place or an address. A screen nobody shows sends
  * nothing anywhere and wakes no radio. */
 unsigned home_sources_wanted(const home_config_t *c);

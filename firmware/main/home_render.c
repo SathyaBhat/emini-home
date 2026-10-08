@@ -4,7 +4,7 @@
 #include "home_types.h"
 #include "home_places.h"
 #include "home_bins.h"
-#include "home_air.h"
+#include "home_alerts.h"
 #include "home_qr.h"
 #include "home_sky.h"
 #include "home_parse.h"
@@ -1535,8 +1535,16 @@ static bool sun_line(char *out, size_t len, const home_config_t *cfg, int64_t no
     snprintf(out, len, "%s %s", "Sunset", clk);
     return true;
 }
-#define RAIN_HOUR_MM 4.0
-/* The next six hours: time, temperature, a rain bar (red from RAIN_HOUR_MM). The strip starts at
+/* Rain bars turn red from the alert threshold of the household (a rain hour, or a rain day). */
+static double rain_hour_mm(const home_config_t *cfg)
+{
+    return cfg->rain_hour_x10 ? cfg->rain_hour_x10 / 10.0 : 4.0;
+}
+static double rain_day_mm(const home_config_t *cfg)
+{
+    return cfg->rain_sum_x10 ? cfg->rain_sum_x10 / 10.0 : 10.0;
+}
+/* The next six hours: time, temperature, a rain bar (red from the rain-hour threshold). The strip starts at
  * the first hour not yet over, as rain_outlook() does. */
 static void hour_strip(canvas_t *c, const home_config_t *cfg, const home_weather_t *w, int64_t now)
 {
@@ -1565,8 +1573,8 @@ static void hour_strip(canvas_t *c, const home_config_t *cfg, const home_weather
         centre(c, x, 186, 62, 24, 2, v);
         double mm = w->hourly_rain[k];
         if (isfinite(mm) && mm > 0.05) {
-            int h = (int)clamp(mm / RAIN_HOUR_MM * 26 + 0.5, 3, 26);
-            rect(c, x + 21, 238 - h, 20, h, mm >= RAIN_HOUR_MM ? RED : BLACK);
+            int h = (int)clamp(mm / rain_hour_mm(cfg) * 26 + 0.5, 3, 26);
+            rect(c, x + 21, 238 - h, 20, h, mm >= rain_hour_mm(cfg) ? RED : BLACK);
         }
     }
 }
@@ -1588,7 +1596,7 @@ static void day_columns(canvas_t *c, const home_config_t *cfg, const home_weathe
             number(a, sizeof a, d->rain, 0, lang);
             snprintf(v, sizeof v, "%s mm", a);
             txt(c, x + 38, 198, cw - 38, 16, 0, v);
-            if (d->rain >= RAIN_HOUR_MM * 2.5f)
+            if (d->rain >= rain_day_mm(cfg))
                 rect(c, x + 38, 214, imin(cw - 42, 24), 3, RED);
         } else if (isfinite(d->rain))
             txt(c, x + 38, 198, cw - 38, 16, 0, "dry");
@@ -1656,10 +1664,37 @@ static void today_footer(canvas_t *c, const home_config_t *cfg, const home_weath
 }
 /* Today, in two layouts. By day: the date, the weather now, when it rains, the next six hours.
  * From evening_minute: tomorrow, and the days after it. In the bins reminder window the bins take
- * the hero and the weather moves down into the band. The alerts corner (top right) and the pushed
- * home values of docs/plan-0.7.md come later. */
-static void today(canvas_t *c, const home_config_t *cfg, const home_weather_t *w, int64_t now)
+ * the hero and the weather moves down into the band. The alerts corner (top right)
+ * is blank when nothing needs doing; the pushed home values of docs/plan-0.7.md come later. */
+static void alert_corner(canvas_t *c, const home_config_t *cfg, const home_data_t *data,
+                         int64_t now, int32_t day, bool evening)
 {
+    home_alert_t al[HOME_ALERT_SLOTS];
+    int more = 0, n = home_alerts(cfg, data, now, day, evening, al, &more);
+    for (int i = 0; i < n; ++i) {
+        int y = 4 + i * 32, ink = BLACK;
+        if (al[i].level == HOME_ALERT_WARN) {
+            rect(c, 264, y, 122, 28, RED);
+            ink = PAPER;
+        } else if (al[i].level == HOME_ALERT_INFO) {
+            rect(c, 264, y, 122, 28, BLACK);
+            rect(c, 266, y + 2, 118, 24, YELLOW);
+        } else {
+            rect(c, 264, y, 122, 28, BLACK);
+            rect(c, 266, y + 2, 118, 24, PAPER);
+        }
+        int tw = width(1, al[i].text, 25);
+        text(c, 264 + imax(4, (122 - tw) / 2), y + 5, 118, 20, 1, ink, al[i].text, 25);
+    }
+    if (more > 0) {
+        char m[16];
+        snprintf(m, sizeof m, "+%d", more);
+        txt(c, 264, 100, 122, 18, 1, m);
+    }
+}
+static void today(canvas_t *c, const home_config_t *cfg, const home_data_t *data, int64_t now)
+{
+    const home_weather_t *w = &data->weather;
     int lang = lang_of(cfg);
     bool f = cfg->units[0] == 'F';
     char buf[160], value[32], rain[64], a[24], b[24];
@@ -1737,6 +1772,8 @@ static void today(canvas_t *c, const home_config_t *cfg, const home_weather_t *w
         txt(c, 50, 267, 336, 20, 1, rain);
     } else if (bins && !reminder)
         bins_line(c, cfg, day, lang, 248);
+    if (known && (have || tom))
+        alert_corner(c, cfg, data, now, day, tom != NULL);
     today_footer(c, cfg, w, now);
 }
 void home_render(const home_config_t *cfg, const home_data_t *data, home_screen_t screen,
@@ -1754,7 +1791,7 @@ void home_render(const home_config_t *cfg, const home_data_t *data, home_screen_
         top(&c, cfg, screen == HOME_TODAY ? tr(c.lang, "Today", "Dziś") : tr(c.lang, "Weather", "Pogoda"));
         empty(&c, cfg, screen, HOME_EMPTY);
     } else if (screen == HOME_TODAY)
-        today(&c, cfg, &data->weather, now);
+        today(&c, cfg, data, now);
     else if (screen == HOME_WEATHER)
         weather(&c, cfg, &data->weather, now);
     else if (screen == HOME_NOTE)
