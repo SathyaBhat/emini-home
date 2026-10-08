@@ -4,20 +4,15 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define HOME_SCHEMA 1
-/* Since 0.5.0 five screens, six with Picture. Settings saved by 0.4.x list three and by 0.5-0.6
- * five: the decoder appends the missing ones at the end of the order, switched off, so the record
- * stays readable and the schema does not change. */
-#define HOME_SCREEN_COUNT 6
+#define HOME_SCHEMA 2
+/* Schema 1 (0.4-0.6) listed weather, feed, note, sky, air, picture; home_config_decode() maps such a
+ * record onto the three screens below. Screen enum values are never persisted, only their names. */
+#define HOME_SCREEN_COUNT 3
 /* Moments of the "Day rhythm", not screens: three, as in every version so far. */
 #define HOME_DAY_SLOTS 3
 #define HOME_FRAME_BYTES 30000
 #define HOME_NOTE_BYTES 241
-#define HOME_FEED_URL_BYTES 513
-/* Picture shows a frame sent over /api/picture as it is; it has no compositions. */
-typedef enum {
-    HOME_WEATHER=0, HOME_FEED=1, HOME_NOTE=2, HOME_SKY=3, HOME_AIR=4, HOME_PICTURE=5
-} home_screen_t;
+typedef enum { HOME_TODAY=0, HOME_WEATHER=1, HOME_NOTE=2 } home_screen_t;
 typedef enum { HOME_FIXED=0, HOME_DAY=1, HOME_ROTATE=2 } home_mode_t;
 /* HOME_CYCLE is stored in the config only; drawing always gets one of the first three. */
 typedef enum { HOME_PRINT=0, HOME_RHYTHM=1, HOME_ATLAS=2, HOME_CYCLE=3 } home_style_t;
@@ -25,6 +20,15 @@ typedef enum { HOME_EMPTY=0, HOME_READY=1, HOME_STALE=2, HOME_ERROR=3 } home_sou
 /* Power mode: Breath turns Wi-Fi off between fetches and opens the panel for five minutes after a
  * press of OK; Open keeps Wi-Fi connected and the panel reachable at any time. */
 typedef enum { HOME_POWER_BREATH=0, HOME_POWER_OPEN=1 } home_power_mode_t;
+#define HOME_BINS 3
+/* Ink indices as the frame stores them. */
+enum { HOME_INK_BLACK = 0, HOME_INK_WHITE = 1, HOME_INK_YELLOW = 2, HOME_INK_RED = 3 };
+typedef struct {
+    uint8_t colour; /* HOME_INK_* */
+    uint8_t every;  /* collected every 1..4 weeks */
+    uint8_t week;   /* 0..every-1, counted from bin_reference */
+    char label[17];
+} home_bin_t;
 typedef struct {
     uint32_t revision;
     char name[49];
@@ -35,7 +39,6 @@ typedef struct {
     double latitude, longitude;
     bool location_ready;
     char note[HOME_NOTE_BYTES];
-    char feed_url[HOME_FEED_URL_BYTES];
     bool enabled[HOME_SCREEN_COUNT];
     uint8_t order[HOME_SCREEN_COUNT];
     uint8_t style[HOME_SCREEN_COUNT];
@@ -47,7 +50,7 @@ typedef struct {
     uint16_t interval_min, pause_min;
     uint16_t cycle_min; /* "In turn": minutes per composition while a screen stays */
     uint8_t ok_action;  /* short OK/BOOT: 0 the "emini" card, 1 refresh, 2 hold, 3 setup window */
-    uint8_t air_main;   /* Air: headline number, 0 European index, 1 US AQI, 2 PM2.5 */
+    bool alerts_air;    /* fetch Open-Meteo air quality for the UV and pollen alerts */
     uint8_t brush;      /* tone structure: 0 grain, 1 halftone, 2 grid */
     uint8_t power_mode; /* home_power_mode_t */
     bool quiet_enabled;
@@ -55,6 +58,12 @@ typedef struct {
     uint8_t weekdays; /* Monday bit0 */
     uint16_t day_minute[HOME_DAY_SLOTS];
     uint8_t day_screen[HOME_DAY_SLOTS];
+    uint8_t bin_weekday;            /* collection day, Monday 0 */
+    int32_t bin_reference;          /* days since 1970-01-01; a collection day of week 0 */
+    uint16_t bins_from, bins_until; /* reminder window on the day before, minutes after midnight */
+    uint16_t evening_minute;        /* Today turns to tomorrow from here, minutes after midnight */
+    uint8_t bin_count;              /* 0 = bins off */
+    home_bin_t bins[HOME_BINS];
 } home_config_t;
 
 typedef struct {
@@ -66,21 +75,42 @@ typedef struct {
     char etag[129];
     char last_modified[65];
 } home_source_meta_t;
+/* met.no symbol families; HOME_SYMBOL_NIGHT is OR-ed in for a *_night code. */
+typedef enum {
+    HOME_SYMBOL_UNKNOWN = 0,
+    HOME_SYMBOL_CLEAR,
+    HOME_SYMBOL_FAIR,
+    HOME_SYMBOL_PARTLY,
+    HOME_SYMBOL_CLOUDY,
+    HOME_SYMBOL_FOG,
+    HOME_SYMBOL_LIGHTRAIN,
+    HOME_SYMBOL_RAIN,
+    HOME_SYMBOL_HEAVYRAIN,
+    HOME_SYMBOL_SHOWERS,
+    HOME_SYMBOL_THUNDER,
+    HOME_SYMBOL_SLEET,
+    HOME_SYMBOL_SNOW,
+    HOME_SYMBOL_NIGHT = 0x80
+} home_symbol_t;
+#define HOME_WEATHER_HOURS 24
+#define HOME_WEATHER_DAYS 6 /* today + 5 */
+typedef struct {
+    int32_t date; /* local civil day (days since 1970-01-01); 0 = empty */
+    float low, high, rain, wind;
+    uint8_t symbol, samples; /* samples < 4 = partial day */
+} home_day_t;
 typedef struct {
     home_source_meta_t meta;
     int64_t forecast_at; /* validity time of temperature/hourly[0], separate from model issue */
     double temperature, low, high, precipitation, wind_speed, cloud_cover;
     char symbol[49];
-    double hourly_temperature[12], hourly_rain[12];
+    double hourly_temperature[HOME_WEATHER_HOURS], hourly_rain[HOME_WEATHER_HOURS];
     uint8_t hourly_count;
+    float hourly_wind[HOME_WEATHER_HOURS]; /* NAN when absent */
+    uint8_t hourly_symbol[HOME_WEATHER_HOURS];
+    home_day_t day[HOME_WEATHER_DAYS];
+    uint8_t day_count;
 } home_weather_t;
-typedef struct {
-    home_source_meta_t meta;
-    char title[257];
-    char source[97];
-    char url[HOME_FEED_URL_BYTES];
-    int64_t published_at;
-} home_feed_t;
 /* Open-Meteo Air Quality. Index 0 is the last full hour at or before now and is
  * never more than one hour behind it; up to 24 hours are kept from there. An
  * absent series, a JSON null and a physically impossible number all yield NAN
@@ -106,7 +136,6 @@ typedef struct {
 } home_air_t;
 typedef struct {
     home_weather_t weather;
-    home_feed_t feed;
     home_air_t air;
 } home_data_t;
 

@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Drive emini Home from a computer on the same network: the note, the screen, the picture.
+"""Drive emini Home from a computer on the same network: the note and the screen.
 
     python3 tools/home_cli.py --host 192.168.1.50 note "Bins out tonight" --show
     python3 tools/home_cli.py show weather
-    python3 tools/home_cli.py convert photo.jpg frame.bin      # needs Pillow
-    python3 tools/home_cli.py picture frame.bin --show         # needs Picture firmware
     python3 tools/home_cli.py frame now.png                    # what the display shows
 
 The host is --host or $EMINI_HOST: the device's address or its name.local, exactly as the phone
@@ -15,7 +13,7 @@ firmware that still pairs, `pair CODE` with the code shown after holding OK keep
 
 In Breath mode (the default) Wi-Fi is off between fetches, so the device answers for about five
 minutes after a press of OK. Anything unattended - a Home Assistant automation - needs Open mode.
-Only the standard library is used, except that `convert` needs Pillow.
+Only the standard library is used. Needs 0.7 firmware (screens today, weather, note).
 """
 
 import argparse
@@ -31,7 +29,7 @@ from pathlib import Path
 WIDTH, HEIGHT = 400, 300
 FRAME_BYTES = WIDTH * HEIGHT // 4
 NOTE_BYTES = 240
-SCREENS = ["weather", "feed", "note", "sky", "air", "picture"]
+SCREENS = ["today", "weather", "note"]
 # Two-bit codes 0..3 are black, white, yellow, red; the RGB is how the paper looks, as in
 # firmware/ui/core.js, so an image is matched against the colours it will actually get.
 PALETTE = [(26, 26, 22), (230, 229, 219), (247, 173, 1), (123, 0, 1)]
@@ -100,6 +98,12 @@ def update_config(host, token, change):
 
 
 def enable(config, screen):
+    # 0.6 firmware (schema 1) lists six other screens; the index below would switch on the wrong one.
+    if config.get("schema") != 2:
+        raise HomeError(
+            "This device runs 0.6 firmware (settings schema %s); enabling a screen needs 0.7 or later"
+            % config.get("schema")
+        )
     config["enabled"][SCREENS.index(screen)] = True
 
 
@@ -138,27 +142,6 @@ def to_png(frame, out):
     )
 
 
-def convert(src, dither):
-    try:
-        from PIL import Image, ImageOps
-    except ImportError:
-        raise HomeError("convert needs Pillow: python3 -m pip install Pillow") from None
-    image = ImageOps.exif_transpose(Image.open(src)).convert("RGB")
-    image = ImageOps.fit(image, (WIDTH, HEIGHT), Image.Resampling.LANCZOS)
-    palette = Image.new("P", (1, 1))
-    palette.putpalette([v for rgb in PALETTE for v in rgb] + [0, 0, 0] * 252)
-    mode = Image.Dither.FLOYDSTEINBERG if dither else Image.Dither.NONE
-    return pack(image.quantize(palette=palette, dither=mode).tobytes())
-
-
-def pack(codes):
-    """One two-bit code per pixel, row by row, into a frame: four pixels a byte, first one on top."""
-    frame = bytearray(FRAME_BYTES)
-    for i, code in enumerate(codes):
-        frame[i // 4] |= (code & 3) << (6 - 2 * (i % 4))
-    return bytes(frame)
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--host", default=os.environ.get("EMINI_HOST"))
@@ -170,25 +153,14 @@ def main():
     p.add_argument("--show", action="store_true", help="switch Note on and show it now")
     p = sub.add_parser("show", help="show a screen now")
     p.add_argument("screen", choices=SCREENS)
-    p = sub.add_parser("picture", help="send a frame (.bin, or an image with Pillow)")
-    p.add_argument("file")
-    p.add_argument("--show", action="store_true", help="switch Picture on and show it now")
-    p.add_argument("--dither", action="store_true", help="dither an image instead of flat colours")
+    sub.add_parser("bins", help="print the next four bin collections")
     p = sub.add_parser("frame", help="save what the display shows (.bin or .png)")
     p.add_argument("out")
-    p = sub.add_parser("convert", help="turn an image into a frame (.bin or .png preview)")
-    p.add_argument("src")
-    p.add_argument("out")
-    p.add_argument("--dither", action="store_true")
     p = sub.add_parser("topng", help="preview a .bin frame as PNG")
     p.add_argument("src")
     p.add_argument("out")
     a = parser.parse_args()
 
-    if a.command == "convert":
-        frame = convert(a.src, a.dither)
-        (to_png(frame, a.out) if a.out.lower().endswith(".png") else Path(a.out).write_bytes(frame))
-        return
     if a.command == "topng":
         frame = Path(a.src).read_bytes()
         check_frame(frame)
@@ -215,18 +187,14 @@ def main():
             show(a.host, token, "note")
     elif a.command == "show":
         show(a.host, token, a.screen)
-    elif a.command == "picture":
-        data = Path(a.file).read_bytes()
-        if not a.file.lower().endswith(".bin"):
-            data = convert(a.file, a.dither)
-        check_frame(data)
-        request(a.host, "POST", "/api/picture", data, token=token)
-        print("Picture saved")
-        if a.show:
-            config = request(a.host, "GET", "/api/config", token=token)
-            if not config["enabled"][SCREENS.index("picture")]:
-                update_config(a.host, token, lambda c: enable(c, "picture"))
-            show(a.host, token, "picture")
+    elif a.command == "bins":
+        status = request(a.host, "GET", "/api/status", token=token)
+        if "bins_next" not in status:
+            raise HomeError("This firmware does not report bins (needs 0.7 with bins)")
+        if not status["bins_next"]:
+            print("No collections: bins are off, or the device clock is not set yet")
+        for e in status["bins_next"]:
+            print("%s  %s" % (e["date"], " + ".join(e["bins"])))
     elif a.command == "frame":
         frame = request(a.host, "GET", "/api/frame", token=token, raw=True)
         check_frame(frame)

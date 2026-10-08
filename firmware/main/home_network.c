@@ -635,8 +635,6 @@ void home_sources_task(void *unused)
          * it rather than walk around it. */
         if (home_runtime.refresh_requested & 1U)
             home_runtime.data.weather.meta.next_fetch = 0;
-        if (home_runtime.refresh_requested & 2U)
-            home_runtime.data.feed.meta.next_fetch = 0;
         if (home_runtime.refresh_requested & 4U)
             home_runtime.data.air.meta.next_fetch = 0;
         *c = home_runtime.config;
@@ -694,36 +692,24 @@ void home_sources_task(void *unused)
          * of waking it again. Not after a failure - that source keeps its own pause. The fetch
          * functions check next_fetch themselves, hence zero on this copy. */
         if (c->power_mode == HOME_POWER_BREATH) {
-            home_source_meta_t *m[] = {&d->weather.meta, &d->feed.meta, &d->air.meta};
+            home_source_meta_t *m[] = {&d->weather.meta, &d->air.meta};
             for (size_t i = 0; i < sizeof m / sizeof m[0]; i++)
                 if (!m[i]->error[0] && now + HOME_BATCH_S >= m[i]->next_fetch)
                     m[i]->next_fetch = 0;
         }
         /* Only screens that are switched on: a screen nobody shows must not send the place or
-         * the reader's address anywhere (air since 0.5.0, weather and headline since 0.6.2). */
+         * anywhere (air only with the UV and pollen alerts on, since 0.7). */
         unsigned wanted = home_sources_wanted(c);
         bool changed = false;
         if ((wanted & 1U) && now >= d->weather.meta.next_fetch) {
             home_fetch_weather(c, &d->weather, now);
             home_lock();
             if (home_runtime.config.latitude == c->latitude &&
-                home_runtime.config.longitude == c->longitude) {
+                home_runtime.config.longitude == c->longitude &&
+                !strcmp(home_runtime.config.timezone, c->timezone)) {
                 home_runtime.data.weather = d->weather;
                 home_runtime.counters.fetches++;
                 home_runtime.refresh_requested &= ~1U;
-                home_runtime.dirty = true;
-                home_runtime.request_id++;
-                changed = true;
-            }
-            home_unlock();
-        }
-        if ((wanted & 2U) && now >= d->feed.meta.next_fetch) {
-            home_fetch_feed(c, &d->feed, now);
-            home_lock();
-            if (!strcmp(home_runtime.config.feed_url, c->feed_url)) {
-                home_runtime.data.feed = d->feed;
-                home_runtime.counters.fetches++;
-                home_runtime.refresh_requested &= ~2U;
                 home_runtime.dirty = true;
                 home_runtime.request_id++;
                 changed = true;
@@ -736,7 +722,7 @@ void home_sources_task(void *unused)
             home_lock();
             if (home_runtime.config.latitude == c->latitude &&
                 home_runtime.config.longitude == c->longitude &&
-                home_runtime.config.enabled[HOME_AIR]) {
+                home_runtime.config.alerts_air) {
                 home_runtime.data.air = d->air;
                 home_runtime.counters.fetches++;
                 home_runtime.refresh_requested &= ~4U;
@@ -750,8 +736,8 @@ void home_sources_task(void *unused)
             home_lock();
             esp_err_t e = home_store_data(&home_runtime.data, &home_runtime.config);
             home_unlock();
-            ESP_LOGI(TAG, "Source cycle complete; weather=%d feed=%d air=%d persistence=%s",
-                     d->weather.meta.state, d->feed.meta.state, d->air.meta.state,
+            ESP_LOGI(TAG, "Source cycle complete; weather=%d air=%d persistence=%s",
+                     d->weather.meta.state, d->air.meta.state,
                      esp_err_to_name(e));
         }
         home_lock();

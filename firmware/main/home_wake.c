@@ -17,9 +17,10 @@ unsigned home_sources_wanted(const home_config_t *c)
 {
     if (!c)
         return 0;
-    return (c->enabled[HOME_WEATHER] && c->location_ready ? 1U : 0U) |
-           (c->enabled[HOME_FEED] && c->feed_url[0] ? 2U : 0U) |
-           (c->enabled[HOME_AIR] && c->location_ready ? 4U : 0U);
+    /* Bit 1 weather, bit 4 air (bit 2 was the news feed, retired in 0.7). Today shows the weather
+     * too; air only feeds the optional UV and pollen alerts. */
+    return ((c->enabled[HOME_TODAY] || c->enabled[HOME_WEATHER]) && c->location_ready ? 1U : 0U) |
+           (c->enabled[HOME_TODAY] && c->alerts_air && c->location_ready ? 4U : 0U);
 }
 
 bool home_sources_due(const home_config_t *c, const home_data_t *d, int64_t now, int64_t ahead)
@@ -29,6 +30,5 @@ bool home_sources_due(const home_config_t *c, const home_data_t *d, int64_t now,
     unsigned wanted = home_sources_wanted(c);
     int64_t at = now + ahead;
     return ((wanted & 1U) && at >= d->weather.meta.next_fetch) ||
-           ((wanted & 2U) && at >= d->feed.meta.next_fetch) ||
            ((wanted & 4U) && at >= d->air.meta.next_fetch);
 }

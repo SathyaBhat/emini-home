@@ -94,23 +94,37 @@
         "A change is requested. This is still the last confirmed image.",
       yourScreens: "Your screens",
       threeScreens: "3 kinds of information",
+      today: "Today",
+      todayDesc: "The day at a glance",
+      alertsAir: "UV & pollen from Open-Meteo (sends your place)",
+      alertsAirHelp:
+        "Adds a note to the top corner when UV or pollen is high. Off, nothing is sent.",
+      evening: "Show tomorrow from",
+      eveningHelp: "From this time Today shows tomorrow's weather and the days after it.",
+      binsHeading: "Bin collection",
+      binsHelp:
+        "Bins show on Today the evening before, between the two times below. Add none to turn this off.",
+      binWeekday: "Collection day",
+      binReference: "A collection date",
+      binFrom: "Remind from",
+      binUntil: "Remind until",
+      binColour: "Bin",
+      binFrequency: "Collected",
+      binLabel: "Name (optional)",
+      binWeekly: "Every week",
+      binFortnightA: "Every other week, with the date above",
+      binFortnightB: "Every other week, the other weeks",
+      binAdd: "Add a bin",
+      binRemove: "Remove",
+      binNext: "Next collections",
+      bin_red: "Red",
+      bin_yellow: "Yellow",
+      bin_black: "Black",
+      bin_white: "White",
       weather: "Weather",
-      feed: "News",
       note: "Your note",
-      sky: "Sky",
-      air: "Air",
-      picture: "Picture",
       weatherDesc: "The pulse of your place",
-      feedDesc: "News from around the world",
       noteDesc: "A few words of your own",
-      skyDesc: "Sun and moon over your place",
-      airDesc: "Air quality, UV and pollen",
-      pictureDesc: "A frame you send from your computer",
-      skySource:
-        "Worked out on the device from the place you saved; nothing is downloaded.",
-      airSource:
-        "Air quality, UV and pollen come from Open-Meteo, licensed under CC BY 4.0.",
-      airMain: "The big number",
       brush: "Brush",
       brushChoice: "Tone structure",
       brushGrain: "Grain",
@@ -118,9 +132,6 @@
       brushGrid: "Grid (classic)",
       brushHelp:
         "Four pigments and no grey: every tone is a pattern. Pick the one that paints it: soft grain, printed dots, or the ordered grid of earlier versions.",
-      airEU: "European air quality index",
-      airUS: "US AQI",
-      airPM: "PM2.5 in micrograms per cubic metre",
       edit: "Edit",
       enabled: "Include this screen",
       off: "Not in rotation",
@@ -144,8 +155,6 @@
         "Use the coordinates of a town, rather than your exact home address.",
       noteText: "Your words",
       noteHelp: "A short thought works best. Watch how much space it takes.",
-      feedURL: "Public RSS / Atom address",
-      feedHelp: "Use an HTTPS feed. Leave this empty to turn the source off.",
       source: "Source",
       fresh: "Current",
       stale: "Older data",
@@ -162,7 +171,7 @@
       refreshSource: "Check for updates",
       sourceQueued: "Update requested. Home respects the source’s cache.",
       sourceOff:
-        "Nothing to check: switch the screen on and set its place or feed first.",
+        "Nothing to check: switch the screen on and set its place first.",
       byteCount: "bytes",
       saved: "Saved on Home",
       unsaved: "Unsaved changes",
@@ -317,7 +326,7 @@
       dismiss: "Close",
       importSummary: "Settings in this recipe",
       noPrivate:
-        "No location, note, feed address or connection details are included.",
+        "No location, note or connection details are included.",
       privateRemoved:
         "Private or unknown fields were removed from this recipe.",
       offlineDraft: "Disconnected · your draft stays on this page",
@@ -374,23 +383,12 @@
         "Zmiana została zlecona. To nadal ostatni potwierdzony obraz.",
       yourScreens: "Twoje ekrany",
       threeScreens: "3 rodzaje informacji",
+      today: "Dziś",
+      todayDesc: "Dzień w skrócie",
       weather: "Pogoda",
-      feed: "Wiadomości",
       note: "Twoja kartka",
-      sky: "Niebo",
-      air: "Powietrze",
-      picture: "Obraz",
       weatherDesc: "Puls Twojego miejsca",
-      feedDesc: "Wiadomości ze świata",
       noteDesc: "Kilka własnych słów",
-      skyDesc: "Słońce i księżyc nad Twoim miejscem",
-      airDesc: "Jakość powietrza, UV i pyłki",
-      pictureDesc: "Klatka wysłana z komputera",
-      skySource:
-        "Liczone na urządzeniu z zapisanej lokalizacji; nic nie jest pobierane.",
-      airSource:
-        "Jakość powietrza, UV i pyłki pochodzą z Open-Meteo, na licencji CC BY 4.0.",
-      airMain: "Duża liczba",
       brush: "Pędzel",
       brushChoice: "Struktura tonów",
       brushGrain: "Ziarno",
@@ -398,9 +396,6 @@
       brushGrid: "Siatka (klasyczna)",
       brushHelp:
         "Cztery pigmenty i żadnej szarości: każdy ton to wzór. Wybierz ten, który go maluje: miękkie ziarno, kropkę jak w druku albo klasyczną siatkę z wcześniejszych wersji.",
-      airEU: "Europejski indeks jakości powietrza",
-      airUS: "Indeks US AQI",
-      airPM: "PM2,5 w mikrogramach na metr sześcienny",
       edit: "Edytuj",
       enabled: "Uwzględnij ten ekran",
       off: "Poza rotacją",
@@ -426,8 +421,6 @@
       noteText: "Twoje słowa",
       noteHelp:
         "Krótka myśl sprawdzi się najlepiej. Sprawdź, ile miejsca zajmuje.",
-      feedURL: "Publiczny adres RSS / Atom",
-      feedHelp: "Użyj kanału HTTPS. Pozostaw puste, aby wyłączyć źródło.",
       source: "Źródło",
       fresh: "Aktualne",
       stale: "Starsze dane",
@@ -445,7 +438,7 @@
       sourceQueued:
         "Zlecono sprawdzenie. Home respektuje pamięć podręczną źródła.",
       sourceOff:
-        "Nie ma czego sprawdzać: najpierw włącz ekran i ustaw jego miejsce albo kanał.",
+        "Nie ma czego sprawdzać: najpierw włącz ekran i ustaw jego miejsce.",
       byteCount: "bajtów",
       saved: "Zapisane na Home",
       unsaved: "Niezapisane zmiany",
@@ -599,7 +592,7 @@
       changeLanguage: "Change language to English",
       dismiss: "Zamknij",
       importSummary: "Ustawienia tego przepisu",
-      noPrivate: "Bez miejsca, notatki, adresu kanału i danych połączenia.",
+      noPrivate: "Bez miejsca, notatki i danych połączenia.",
       privateRemoved: "Prywatne lub nieznane pola usunięto z przepisu.",
       offlineDraft: "Rozłączono · szkic zostaje na tej stronie",
       pending: "Zmiana zlecona",
@@ -662,11 +655,9 @@
     edit: '<path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14v6Z"/>',
     weather:
       '<path d="M8 6V3m-5 8H1m14-7 2-2M3 4l2 2"/><path d="M7 15a5 5 0 1 1 8-6M7 20h12a4 4 0 0 0 0-8 6 6 0 0 0-11-1 5 5 0 0 0-1 9Z"/>',
-    feed: '<path d="M5 4h14v17H5V4ZM8 8h8m-8 4h8m-8 4h5"/>',
+    today:
+      '<rect x="3" y="4" width="18" height="17" rx="1"/><path d="M3 9h18M8 2v4m8-4v4"/>',
     note: '<path d="M4 3h16v13l-5 5H4V3Zm11 18v-5h5M8 8h8m-8 4h5"/>',
-    sky: '<path d="M3 17a9 9 0 0 1 18 0"/><path d="M1 17h2m18 0h2M12 4v2M5.6 7.6 7 9m10.4-1.4L16 9"/><circle cx="12" cy="17" r="3"/>',
-    air: '<path d="M3 8h11a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h8"/>',
-    picture: '<rect x="3" y="5" width="18" height="14" rx="1"/><path d="m3 16 5-5 4 4 3-3 6 6"/>',
     palette:
       '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18M3 12h18"/>',
     globe:
@@ -933,15 +924,11 @@
     setTimeout(poll, 1000);
   }
   function sourceLabel(screen) {
-    if (screen === "picture") return say("Sent from your computer", "Wysłany z komputera");
+    if (screen === "today") screen = "weather";
     if (screen === "note")
       return S.config?.note
         ? say("Your words", "Twoje słowa")
         : say("Add your words", "Dodaj swoje słowa");
-    if (screen === "sky")
-      return S.config?.location_ready === false
-        ? say("Needs your location", "Potrzebuje lokalizacji")
-        : say("Computed on the device", "Liczone na urządzeniu");
     const state = S.status?.sources?.[screen]?.state;
     const key = {
       ready: "fresh",
@@ -969,62 +956,6 @@
       const badge = card.querySelector("[data-on-device]");
       if (badge) badge.hidden = !active;
     });
-  }
-  function safeStoryURL(value, feedURL) {
-    if (
-      typeof value !== "string" ||
-      value.length > 2048 ||
-      /[\u0000-\u0020\u007f\\]/.test(value)
-    )
-      return null;
-    try {
-      const url = new URL(value);
-      if (
-        url.protocol !== "https:" ||
-        !url.hostname ||
-        url.username ||
-        url.password
-      )
-        return null;
-      if (typeof feedURL === "string" && feedURL) {
-        try {
-          const feed = new URL(feedURL),
-            article = new URL(url.href);
-          feed.hash = "";
-          article.hash = "";
-          if (feed.href === article.href) return null;
-        } catch {
-          /* An invalid configured feed is not an article fallback. */
-        }
-      }
-      return url.href;
-    } catch {
-      return null;
-    }
-  }
-  function updateSelectedStory() {
-    const holder = document.querySelector("#selected-story");
-    if (!holder) return;
-    const item = S.status?.sources?.feed,
-      url = safeStoryURL(item?.url, S.config?.feed_url);
-    holder.hidden = !url;
-    if (!url) return;
-    holder.querySelector("[data-story-title]").textContent =
-      typeof item.title === "string" ? item.title : "";
-    const source = typeof item.source === "string" ? item.source : "";
-    const published =
-      Number.isFinite(item.published_at) && item.published_at > 0
-        ? formatTime(item.published_at)
-        : "";
-    holder.querySelector("[data-story-source]").textContent = [
-      source,
-      published,
-    ]
-      .filter(Boolean)
-      .join(" · ");
-    const link = holder.querySelector("[data-story-link]");
-    link.href = url;
-    link.textContent = say("Read full story ↗", "Przeczytaj wiadomość ↗");
   }
   function modeSummary() {
     const c = S.config;
@@ -1057,40 +988,70 @@
   function overview() {
     return `<div class="home-overview"><section class="now-section"><div class="now-heading"><div><p class="eyebrow">${say("ON YOUR HOME", "NA TWOIM HOME")}</p><h1>${esc(S.config.name)}</h1></div><span class="state-chip" id="display-state">${statusName()}</span></div><figure class="now-art"><div class="device-frame" id="confirmed-holder">${S.frame ? `<canvas id="confirmed-frame" width="400" height="300" role="img" aria-label="${esc(t("confirmed"))}"></canvas>` : `<div class="frame-placeholder">${icon("screens")}<strong>${t("unconfirmed")}</strong><small id="frame-message">${t("frameUnknown")}</small></div>`}</div><figcaption><span id="frame-label">${t("confirmed")}</span><button class="icon-label-button" data-action="native-preview" data-kind="confirmed" ${!S.frame ? "disabled" : ""}>${icon("screens")}<span>1:1</span></button></figcaption></figure><p class="hint" id="battery-summary"></p><p class="hint" data-awake-note hidden></p><p class="refresh-note" id="refresh-note">${t("frameHint")}</p><button class="rhythm-summary" data-action="open-rhythm">${icon(S.status?.pause_remaining > 0 ? "pause" : "clock")}<span><strong>${t("rhythm")}</strong><small id="mode-summary">${esc(modeSummary())}</small></span>${icon("arrow")}</button>${!S.status?.online ? `<button class="network-prompt" data-action="wifi-settings">${icon("wifi")}<span>${say("Connect Wi-Fi for live information", "Połącz Wi-Fi, aby mieć aktualne informacje")}</span>${icon("arrow")}</button>` : ""}</section><section class="screen-library"><div class="section-label"><div><p class="eyebrow">${say("MAKE IT YOURS", "PO TWOJEMU")}</p><h2>${t("yourScreens")}</h2></div><span class="small muted">${S.config.enabled.filter(Boolean).length}/${C.screens.length} ${say("active", "aktywne")}</span></div><div class="poster-list">${S.draft.order.map((key) => `<article class="poster-card ${S.status?.displayed_screen === key ? "on-device" : ""}" data-poster-screen="${key}"><button class="poster-open" data-action="select" data-screen="${key}"><span class="poster-thumb"><canvas data-screen="${key}" width="400" height="300" aria-hidden="true"></canvas></span><span class="poster-copy"><span class="poster-name">${icon(key)}${t(key)}</span><small data-source-label>${!S.draft.enabled[C.screens.indexOf(key)] ? t("off") : esc(sourceLabel(key))}</small><span class="on-device-label" data-on-device ${S.status?.displayed_screen === key ? "" : "hidden"}>${icon("check")}${t("active")}</span></span>${icon("arrow")}</button><div class="poster-actions"><button data-action="select" data-screen="${key}">${icon("edit")}${t("edit")}</button><button data-action="show-card" data-screen="${key}" ${S.dirty || !S.config.enabled[C.screens.indexOf(key)] ? "disabled" : ""}>${icon("play")}${t("show")}</button></div></article>`).join("")}</div></section></div>`;
   }
+  const binFreqs = [
+    ["1:0", "binWeekly"],
+    ["2:0", "binFortnightA"],
+    ["2:1", "binFortnightB"],
+  ];
+  function binRows() {
+    const b = S.draft.bins;
+    return b.list
+      .map((x, i) => {
+        const freq = `${x.every}:${x.week}`;
+        const known = binFreqs.some(([v]) => v === freq);
+        return `<div class="row"><label class="field"><span>${t("binColour")}</span><select data-path="bins.list.${i}.colour">${options(
+          ["red", "yellow", "black", "white"].map((c) => [c, t("bin_" + c)]),
+          x.colour,
+        )}</select></label><label class="field"><span>${t("binFrequency")}</span><select data-bin-freq="${i}">${options(
+          [
+            ...binFreqs.map(([v, k]) => [v, t(k)]),
+            ...(known ? [] : [[freq, `${x.every} / ${x.week}`]]),
+          ],
+          freq,
+        )}</select></label><label class="field"><span>${t("binLabel")}</span><input data-path="bins.list.${i}.label" type="text" maxlength="16" value="${esc(x.label)}"></label><button data-action="bin-remove" data-index="${i}">${t("binRemove")}</button></div>`;
+      })
+      .join("");
+  }
+  function binsNextList() {
+    const b = S.draft.bins;
+    if (!b.list.length || C.binDay(b.reference) === null) return "";
+    const now = new Date();
+    const from = Math.floor(
+      Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86400000,
+    );
+    const rows = C.binsNext(S.draft, from, 4)
+      .map(
+        ({ day, which }) =>
+          `<li>${esc(new Date(day * 86400000).toLocaleDateString(S.draft.locale || "en", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }))} · ${which.map((i) => esc(b.list[i].label || t("bin_" + b.list[i].colour))).join(" + ")}</li>`,
+      )
+      .join("");
+    return `<p class="hint">${t("binNext")}</p><ul class="bins-next">${rows}</ul>`;
+  }
+  function todayEditor() {
+    const b = S.draft.bins;
+    const days = [0, 1, 2, 3, 4, 5, 6].map((i) => [
+      i,
+      new Date(Date.UTC(2024, 0, 1 + i)).toLocaleDateString(
+        S.draft.locale || "en",
+        { weekday: "long", timeZone: "UTC" },
+      ),
+    ]);
+    return `${check("alerts.air", "alertsAir")}<p class="hint">${t("alertsAirHelp")}</p>${field("evening", "evening", "time")}<p class="hint">${t("eveningHelp")}</p><h3>${t("binsHeading")}</h3><p class="hint">${t("binsHelp")}</p><label class="field"><span>${t("binWeekday")}</span><select data-path="bins.weekday" data-num>${options(days, b.weekday)}</select></label>${field("bins.reference", "binReference", "date", 'min="2000-01-01" max="2100-12-31"')}<div class="row">${field("bins.from", "binFrom", "time")}${field("bins.until", "binUntil", "time")}</div>${binRows()}${b.list.length < 3 ? `<button data-action="bin-add">${t("binAdd")}</button>` : ""}${binsNextList()}`;
+  }
   function editor() {
     const s = S.selected,
       index = C.screens.indexOf(s),
       position = S.draft.order.indexOf(s),
       last =
         S.draft.enabled.filter(Boolean).length === 1 && S.draft.enabled[index];
-    return `<section class="editor-page">${backButton()}<div class="page-title"><span class="title-icon">${icon(s)}</span><div><h1>${t(s)}</h1><p>${t(s + "Desc")}</p></div></div><div class="editor-layout"><section class="editor-fields"><div class="form-section"><h2>${say("What it says", "Co pokazuje")}</h2>${s === "feed" ? `<section id="selected-story" class="source-state" hidden><strong data-story-title></strong><p class="hint" data-story-source></p><a class="button-link" data-story-link target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">${say("Read full story ↗", "Przeczytaj wiadomość ↗")}</a></section>` : ""}<div class="fields">${
+    return `<section class="editor-page">${backButton()}<div class="page-title"><span class="title-icon">${icon(s)}</span><div><h1>${t(s)}</h1><p>${t(s + "Desc")}</p></div></div><div class="editor-layout"><section class="editor-fields"><div class="form-section"><h2>${say("What it says", "Co pokazuje")}</h2><div class="fields">${
       s === "weather"
         ? weatherEditor()
-        : s === "feed"
-          ? field(
-              "feed_url",
-              "feedURL",
-              "url",
-              'maxlength="512" inputmode="url" placeholder="https://…" autocomplete="off"',
-              "feedHelp",
-            )
-          : s === "sky"
-            ? `<p class="hint">${t("skySource")}</p>`
-            : s === "air"
-              ? `<p class="hint">${t("airSource")}</p>${select(
-                  "air_main",
-                  "airMain",
-                  [
-                    ["eu", t("airEU")],
-                    ["us", t("airUS")],
-                    ["pm25", t("airPM")],
-                  ],
-                )}`
-              : s === "picture"
-                ? `<p class="hint">${say("Send a 400 × 300 four-colour frame to /api/picture from your computer; the phone panel does not upload pictures.", "Wyślij z komputera klatkę 400 × 300 w czterech kolorach na /api/picture; panel w telefonie nie wysyła obrazów.")}</p>`
-                : `<label class="field"><span>${t("noteText")}</span><textarea data-path="note" maxlength="240" rows="5" placeholder="${say("What matters today?", "Co jest dziś ważne?")}">${esc(S.draft.note)}</textarea><small>${t("noteHelp")}<span id="note-count">${noteSpace(S.draft.note)}</span><progress id="note-meter" max="100" value="${Math.min(100, C.noteUsage(S.draft.note).percent)}" aria-label="${esc(noteSpace(S.draft.note))}"></progress></small></label>`
+        : s === "today"
+          ? todayEditor()
+          : `<label class="field"><span>${t("noteText")}</span><textarea data-path="note" maxlength="240" rows="5" placeholder="${say("What matters today?", "Co jest dziś ważne?")}">${esc(S.draft.note)}</textarea><small>${t("noteHelp")}<span id="note-count">${noteSpace(S.draft.note)}</span><progress id="note-meter" max="100" value="${Math.min(100, C.noteUsage(S.draft.note).percent)}" aria-label="${esc(noteSpace(S.draft.note))}"></progress></small></label>`
     }</div></div>${
-      s === "picture"
+      s === "today"
         ? ""
         : `<div class="form-section"><h2>${say("How it looks", "Jak wygląda")}</h2><div class="fields">${select(
             "styles." + s,
@@ -1396,6 +1357,20 @@
           "'": "&#39;",
         })[c],
     );
+  /* An older record may lack the blocks the Today editor writes to. The bins default is off: an
+     empty list, with a Tuesday reference so the block is valid as soon as a bin is added. */
+  const withAlerts = (c) => ({
+    ...c,
+    alerts: c.alerts || { air: false },
+    evening: c.evening || "18:00",
+    bins: c.bins || {
+      weekday: 1,
+      reference: "1970-01-06",
+      from: "17:00",
+      until: "19:00",
+      list: [],
+    },
+  });
   const val = (path) => path.split(".").reduce((v, k) => v?.[k], S.draft);
   const options = (list, value) =>
     list
@@ -2051,7 +2026,7 @@
       d = S.draft,
       sources = S.status?.sources;
     if (!c || !d) return false;
-    if (screen === "picture") return true;
+    if (screen === "today") return true;
     if (screen === "weather")
       return (
         c.location_ready !== false &&
@@ -2059,27 +2034,6 @@
         d.latitude === c.latitude &&
         d.longitude === c.longitude &&
         sources?.weather?.valid === true
-      );
-    if (screen === "feed")
-      return (
-        d.feed_url === c.feed_url &&
-        sources?.feed?.valid === true &&
-        !!sources.feed.title
-      );
-    if (screen === "sky")
-      return (
-        c.location_ready !== false &&
-        d.location_ready !== false &&
-        d.latitude === c.latitude &&
-        d.longitude === c.longitude
-      );
-    if (screen === "air")
-      return (
-        c.location_ready !== false &&
-        d.location_ready !== false &&
-        d.latitude === c.latitude &&
-        d.longitude === c.longitude &&
-        sources?.air?.valid === true
       );
     return typeof d.note === "string" && d.note.trim() !== "";
   }
@@ -2220,8 +2174,8 @@
       if (!confirmed || C.validate(confirmed).length)
         throw new Error("location_saved_unknown");
       saved = true;
-      S.config = C.clone(confirmed);
-      S.draft = C.clone(confirmed);
+      S.config = withAlerts(C.clone(confirmed));
+      S.draft = withAlerts(C.clone(confirmed));
       S.draftFrames = {};
       S.conflict = false;
       S.dirty = false;
@@ -2300,11 +2254,12 @@
       updateDirty();
     }
   }
-  function sourceBlock(s) {
-    /* Note is typed here and Sky is computed on the device: neither has anything
-       to fetch. Air does, so it gets the block and names its provider. */
-    if (s === "note" || s === "sky" || s === "picture") return "";
-    const v = S.status?.sources?.[s] || {};
+  function sourceBlock(screen) {
+    /* Note is typed here and has nothing to fetch. Today shows the weather, so it names
+       the weather source. */
+    if (screen === "note") return "";
+    const s = screen === "today" ? "weather" : screen,
+      v = S.status?.sources?.[s] || {};
     const name = [
       "fresh",
       "stale",
@@ -2452,7 +2407,6 @@
     if (!S.config) return;
     updateHomeCards();
     updateBattery();
-    updateSelectedStory();
     if (shouldOnboard() && !$("#wifi-panel")) {
       render();
       return;
@@ -2483,7 +2437,7 @@
         "/" +
         S.config.revision +
         "/" +
-        JSON.stringify(S.status?.sources?.[S.selected] || {});
+        JSON.stringify(S.status?.sources?.[S.selected === "today" ? "weather" : S.selected] || {});
       if (sh.dataset.stateKey !== key) {
         const open = sh.querySelector("details")?.open,
           focused = sh.contains(document.activeElement);
@@ -2511,8 +2465,8 @@
       await loadTimezones();
       const config = await request("/api/config");
       if (C.validate(config).length) throw new Error("config_schema");
-      S.config = C.clone(config);
-      S.draft = C.clone(config);
+      S.config = withAlerts(C.clone(config));
+      S.draft = withAlerts(C.clone(config));
       S.draftFrames = {};
       S.dirty = false;
       S.conflict = false;
@@ -2638,13 +2592,11 @@
                 .map(
                   (k) =>
                     ({
-                      feed_url: t("feedURL"),
                       large_text: t("largeText"),
                       interval_min: t("interval"),
                       pause_min: t("pauseMinutes"),
                       cycle_min: t("cycleInterval"),
                       ok_action: t("okAction"),
-                      air_main: t("airMain"),
                       clock24: t("clock"),
                       weekdays: t("days"),
                     })[k] || t(k),
@@ -2670,9 +2622,9 @@
       if (C.validate(next).length) throw new Error("config_schema");
       const editedWhileSaving =
         JSON.stringify(S.draft) !== JSON.stringify(submitted);
-      S.config = C.clone(next);
+      S.config = withAlerts(C.clone(next));
       if (editedWhileSaving) S.draft.revision = next.revision;
-      else S.draft = C.clone(next);
+      else S.draft = withAlerts(C.clone(next));
       S.draftFrames = {};
       S.conflict = false;
       S.dirty = editedWhileSaving;
@@ -2698,7 +2650,7 @@
       const raw = JSON.parse(await file.text()),
         recipe = C.safeRecipe(raw);
       const removed = Object.keys(raw).some(
-        (k) => k !== "schema" && !C.recipeKeys.includes(k),
+        (k) => k !== "schema" && k !== "air_main" && !C.recipeKeys.includes(k),
       );
       dialog(
         `<h2>${t("recipeReview")}</h2><p>${t("recipeReviewCopy")}</p>${removed ? `<p>${t("privateRemoved")}</p>` : ""}<dl class="device-facts"><dt>${t("mode")}</dt><dd>${t(recipe.mode)}</dd><dt>${t("texture")}</dt><dd>${recipe.texture} px</dd><dt>${t("intensity")}</dt><dd>${[t("soft"), t("balanced"), t("bold")][recipe.intensity]}</dd><dt>${t("yourScreens")}</dt><dd>${recipe.order.map((s) => t(s)).join(" / ")}</dd></dl><details><summary>${t("importSummary")}</summary><pre>${esc(JSON.stringify(recipe, null, 2))}</pre></details><p class="hint">${t("noPrivate")}</p><div class="inline-actions"><button data-modal="cancel">${t("cancel")}</button><button class="primary" id="confirm-import">${t("importRecipe")}</button></div>`,
@@ -2799,6 +2751,7 @@
       f.type === "checkbox"
         ? f.checked
         : f.type === "number" ||
+            f.dataset.num !== undefined ||
             ["texture", "intensity"].includes(f.dataset.path)
           ? f.value === ""
             ? NaN
@@ -2818,6 +2771,18 @@
       updateDirty();
     }
     if (f.id === "recipe-file") reviewRecipe(f.files[0]);
+    if (f.dataset.binFreq !== undefined) {
+      const [every, week] = f.value.split(":").map(Number);
+      Object.assign(S.draft.bins.list[Number(f.dataset.binFreq)], { every, week });
+      updateDirty();
+      render();
+    }
+    // The list of next collections follows the choices that change it, not every keystroke.
+    if (
+      f.dataset.path?.startsWith("bins.") &&
+      (f.tagName === "SELECT" || f.type === "date")
+    )
+      render();
   });
   app.addEventListener("click", async (e) => {
     const b = e.target.closest("[data-action]");
@@ -2838,6 +2803,14 @@
         render();
       } else if (a === "power-mode") {
         S.draft.power_mode = b.dataset.mode;
+        render();
+      } else if (a === "bin-add") {
+        S.draft.bins.list.push({ colour: "red", every: 1, week: 0, label: "" });
+        updateDirty();
+        render();
+      } else if (a === "bin-remove") {
+        S.draft.bins.list.splice(Number(b.dataset.index), 1);
+        updateDirty();
         render();
       } else if (a === "move") {
         const i = S.draft.order.indexOf(S.selected),

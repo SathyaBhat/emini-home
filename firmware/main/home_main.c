@@ -3,10 +3,10 @@
 #include "home_places.h"
 #include "home_discovery.h"
 #include "home_panel.h"
-#include "home_picture.h"
 #include "home_power.h"
 #include "home_store.h"
 #include "home_wake.h"
+#include "home_bins.h"
 #include "driver/gpio.h"
 #include "esp_timer.h"
 #include "esp_random.h"
@@ -43,9 +43,7 @@ void home_render_locked(const home_config_t *c, const home_data_t *d, int screen
                         uint8_t *frame)
 {
     xSemaphoreTake(render_lock, portMAX_DELAY);
-    /* Picture is the frame as it was sent; home_render() draws its card until there is one. */
-    if (screen != HOME_PICTURE || !home_picture_load(frame))
-        home_render(c, d, screen, now, frame);
+    home_render(c, d, screen, now, frame);
     xSemaphoreGive(render_lock);
 }
 bool home_localtime(const home_config_t *c, time_t now, struct tm *out)
@@ -134,18 +132,12 @@ static bool screen_has_data(int s)
     const home_config_t *c = &home_runtime.config;
     const home_data_t *d = &home_runtime.data;
     switch (s) {
+    case HOME_TODAY:
+        return c->location_ready; /* bins and pushed values will also count, see plan-0.7 */
     case HOME_WEATHER:
         return c->location_ready && d->weather.meta.valid;
-    case HOME_FEED:
-        return d->feed.meta.valid;
     case HOME_NOTE:
         return c->note[0] != 0;
-    case HOME_SKY:
-        return c->location_ready; /* computed on the device, nothing to download */
-    case HOME_AIR:
-        return c->location_ready && d->air.meta.valid;
-    case HOME_PICTURE:
-        return home_picture_present();
     default:
         return false;
     }
@@ -682,9 +674,8 @@ void home_loop_step(void)
             ESP_LOGW(TAG, "Power log not saved: %s", esp_err_to_name(stored));
         home_lock();
         home_source_meta_t *meta[] = {&home_runtime.data.weather.meta,
-                                      &home_runtime.data.feed.meta,
                                       &home_runtime.data.air.meta};
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < 2; i++)
             if (meta[i]->valid && meta[i]->expires_at < now && meta[i]->state == HOME_READY) {
                 meta[i]->state = HOME_STALE;
                 home_runtime.dirty = true;
@@ -695,6 +686,21 @@ void home_loop_step(void)
         home_unlock();
         if (now % 3600 < 60)
             dirty = true;
+        /* The edges of the bins reminder window fall at any minute, not on the hour: redraw when
+         * the picture Today would draw changes (window opens or closes, or the day turns over).
+         * Other screens draw the same frame, which the frame-hash dedupe below drops. */
+        static int32_t bins_key = -1;
+        struct tm lt;
+        int32_t key = 0;
+        if (now >= 1704067200 && home_localtime(c, (time_t)now, &lt)) {
+            int32_t day = home_days_from_civil(lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday);
+            int minute = lt.tm_hour * 60 + lt.tm_min;
+            key = day * 4 + (c->bin_count && home_bins_reminder(c, day, minute, NULL)) * 2 +
+                  (minute >= c->evening_minute);
+        }
+        if (bins_key >= 0 && key != bins_key)
+            dirty = true;
+        bins_key = key;
     }
     /* "In turn": the next composition whenever the screen appears, and every
      * cycle_min while it stays on the display. The timer waits for valid time,
@@ -874,10 +880,6 @@ void app_main(void)
         ESP_LOGE(TAG, "Crypto initialization failed");
         abort();
     }
-    /* After crypto: a saved picture is checked against its hash. Without one Picture shows its
-     * card, so a failure here is not a reason to stop. */
-    if (home_picture_init() != ESP_OK)
-        ESP_LOGW(TAG, "Picture storage unavailable");
     if (!home_runtime.secrets.ap_password[0]) {
         bootloader_random_enable();
         const char alphabet[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";

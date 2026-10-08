@@ -33,12 +33,10 @@
   }
   const boot = createBootGuard(root);
   if (boot) root.HomeBoot = boot;
-  // Since 0.5.0 five screens, six with "picture"; the new ones are off by default and come last.
-  // Settings and recipes written before 0.5.0 list only the first three (LEGACY), before
-  // Picture five (FIVE).
-  const screens = ["weather", "feed", "note", "sky", "air", "picture"];
-  const LEGACY = 3;
-  const FIVE = 5;
+  // Since 0.7 (schema 2) three screens. Settings and recipes of 0.6 and older (schema 1) list
+  // three, five or six of LEGACY_SCREENS; migrateLegacy() maps them, as home_config.c does.
+  const screens = ["today", "weather", "note"];
+  const LEGACY_SCREENS = ["weather", "feed", "note", "sky", "air", "picture"];
   // "cycle" = Print, Rhythm and Atlas take turns. Previews never send it.
   const styles = ["print", "rhythm", "atlas", "cycle"];
   const geocoder = "https://geocoding-api.open-meteo.com/v1/search";
@@ -74,7 +72,6 @@
     "pause_min",
     "cycle_min",
     "ok_action",
-    "air_main",
     "brush",
     "day",
     "quiet",
@@ -89,6 +86,36 @@
     percent: Math.ceil((bytes(value) / 240) * 100),
     overfull: bytes(value) > 240,
   });
+  // Bins, as home_bins.c: days are counted since 1970-01-01, weekdays start at Monday = 0.
+  // binDay("2026-10-06") is that date's day number, or null for a date that does not exist.
+  function binDay(text) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text || "");
+    if (!m) return null;
+    const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    if (y < 2000 || y > 2100) return null;
+    const t = new Date(Date.UTC(y, mo - 1, d));
+    if (t.getUTCMonth() !== mo - 1 || t.getUTCDate() !== d) return null;
+    return Math.round(t.getTime() / 86400000);
+  }
+  const binWeekday = (day) => (((day + 3) % 7) + 7) % 7;
+  // Indexes of the bins collected on `day`.
+  function binsOn(config, day) {
+    const b = config.bins;
+    if (!b || !b.list.length || binWeekday(day) !== b.weekday) return [];
+    const weeks = Math.floor((day - binDay(b.reference)) / 7);
+    return b.list.flatMap((x, i) =>
+      (((weeks % x.every) + x.every) % x.every === x.week ? [i] : []),
+    );
+  }
+  // The next `count` collections from `from` (a day number), at most 35 days ahead each.
+  function binsNext(config, from, count) {
+    const out = [];
+    for (let day = from; out.length < count && day < from + 35 * count; day++) {
+      const which = binsOn(config, day);
+      if (which.length) out.push({ day, which });
+    }
+    return out;
+  }
   function formatTimestamp(epoch, locale, zone, clock24) {
     if (!Number.isFinite(epoch) || epoch <= 0) return null;
     if (typeof zone !== "string" || !zone) zone = "UTC";
@@ -380,7 +407,7 @@
     const s = status && status.sources;
     if (!s || typeof s !== "object") return null;
     return JSON.stringify(
-      ["weather", "feed"].map((k) => [
+      ["weather", "air"].map((k) => [
         s[k]?.fetched_at ?? null,
         s[k]?.valid ?? null,
       ]),
@@ -497,14 +524,13 @@
       if ((!recipe || has(k)) && !ok) errors.push(k);
     };
     if (!c || typeof c !== "object" || Array.isArray(c)) return ["schema"];
-    check("schema", c.schema === 1);
+    check("schema", c.schema === 2);
     if (!recipe) {
       check("revision", Number.isInteger(c.revision) && c.revision >= 0);
       for (const [k, n] of [
         ["name", 48],
         ["location", 64],
         ["note", 240],
-        ["feed_url", 512],
       ])
         check(k, typeof c[k] === "string" && bytes(c[k]) <= n);
       check(
@@ -526,21 +552,52 @@
       );
       // Same limits as home_config.c, so Home never rejects what the panel accepted.
       check("name", typeof c.name === "string" && c.name.trim() !== "");
-      if (c.feed_url) {
-        try {
-          const u = new URL(c.feed_url);
-          if (
-            u.protocol !== "https:" ||
-            u.username ||
-            u.password ||
-            !c.feed_url.startsWith("https://") ||
-            /[@#\s\\]/.test(c.feed_url)
-          )
-            errors.push("feed_url");
-        } catch {
-          errors.push("feed_url");
-        }
-      }
+      check(
+        "alerts",
+        c.alerts === undefined ||
+          (c.alerts &&
+            typeof c.alerts === "object" &&
+            !Array.isArray(c.alerts) &&
+            Object.keys(c.alerts).every((k) => k === "air") &&
+            (c.alerts.air === undefined || typeof c.alerts.air === "boolean")),
+      );
+      const b = c.bins;
+      const hm = (x) =>
+        typeof x === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(x);
+      check("evening", c.evening === undefined || hm(c.evening));
+      check(
+        "bins",
+        b === undefined ||
+          (b &&
+            typeof b === "object" &&
+            !Array.isArray(b) &&
+            Object.keys(b).every((k) =>
+              ["weekday", "reference", "from", "until", "list"].includes(k),
+            ) &&
+            Number.isInteger(b.weekday) &&
+            b.weekday >= 0 &&
+            b.weekday <= 6 &&
+            binDay(b.reference) !== null &&
+            (binDay(b.reference) + 3) % 7 === b.weekday &&
+            hm(b.from) &&
+            hm(b.until) &&
+            b.from < b.until &&
+            Array.isArray(b.list) &&
+            b.list.length <= 3 &&
+            b.list.every(
+              (x) =>
+                x &&
+                ["black", "white", "yellow", "red"].includes(x.colour) &&
+                Number.isInteger(x.every) &&
+                x.every >= 1 &&
+                x.every <= 4 &&
+                Number.isInteger(x.week) &&
+                x.week >= 0 &&
+                x.week < x.every &&
+                (x.label === undefined ||
+                  (typeof x.label === "string" && bytes(x.label) <= 16)),
+            )),
+      );
     }
     check("fixed_screen", screens.includes(c.fixed_screen));
     check(
@@ -556,12 +613,6 @@
     check(
       "power_mode",
       c.power_mode === undefined || ["breath", "open"].includes(c.power_mode),
-    );
-    check(
-      "air_main",
-      (recipe && !has("air_main")) ||
-        c.air_main === undefined ||
-        ["eu", "us", "pm25"].includes(c.air_main),
     );
     check(
       "brush",
@@ -593,9 +644,8 @@
         c.interval_min >= 5 &&
         c.interval_min <= 1440,
     );
-    // Same shapes as home_config.c: three (before 0.5.0), five (before Picture) or all screens.
-    const listed = (x) =>
-      Array.isArray(x) && (x.length === LEGACY || x.length === FIVE || x.length === screens.length);
+    // Same shape as home_config.c: one entry per screen.
+    const listed = (x) => Array.isArray(x) && x.length === screens.length;
     check(
       "enabled",
       listed(c.enabled) &&
@@ -615,7 +665,7 @@
         Object.keys(c.styles).every(
           (s) => screens.includes(s) && styles.includes(c.styles[s]),
         ) &&
-        screens.slice(0, LEGACY).every((s) => styles.includes(c.styles[s])),
+        screens.every((s) => styles.includes(c.styles[s])),
     );
     const time = (x) =>
       typeof x === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(x);
@@ -641,25 +691,65 @@
     );
     return [...new Set(errors)];
   }
-  function safeRecipe(raw) {
+  // Maps a schema-1 (0.6 and older) config or recipe to schema 2, as home_config_decode() does:
+  // feed, sky, air and picture are dropped, Today goes first and is enabled, screens the record
+  // does not mention stay off at the end, and references to a dropped screen become Today.
+  // enabled[] is indexed by the writer's canonical screen, not by position in order[].
+  // Anything it cannot read is returned with schema 1, so validate() rejects it.
+  function migrateLegacy(raw) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw) || raw.schema !== 1)
+      return raw;
+    const c = clone(raw),
+      n = Array.isArray(c.enabled) ? c.enabled.length : 0;
+    if (
+      !(n === 3 || n === 5 || n === LEGACY_SCREENS.length) ||
+      !Array.isArray(c.order) ||
+      c.order.length !== n ||
+      new Set(c.order).size !== n ||
+      !c.order.every((s) => LEGACY_SCREENS.slice(0, n).includes(s)) ||
+      !c.enabled.every((x) => typeof x === "boolean")
+    )
+      return raw;
+    const was = (name) => {
+      const i = LEGACY_SCREENS.indexOf(name);
+      return i < n && c.enabled[i];
+    };
+    const kept = c.order.filter((s) => s === "weather" || s === "note");
+    const ref = (s) => (s === "note" ? "note" : "today");
+    c.enabled = screens.map((s) => s === "today" || was(s));
+    c.order = ["today", ...kept, ...screens.filter((s) => s !== "today" && !kept.includes(s))];
+    if (c.styles && typeof c.styles === "object" && !Array.isArray(c.styles))
+      c.styles = {
+        today: "print",
+        weather: c.styles.weather,
+        note: c.styles.note,
+      };
+    if (typeof c.fixed_screen === "string") c.fixed_screen = ref(c.fixed_screen);
+    if (Array.isArray(c.day))
+      c.day = c.day.map((d) =>
+        d && typeof d === "object" && typeof d.screen === "string"
+          ? { ...d, screen: ref(d.screen) }
+          : d,
+      );
+    delete c.feed_url;
+    delete c.air_main;
+    c.schema = 2;
+    return c;
+  }
+  function safeRecipe(input) {
+    const raw = migrateLegacy(input);
     if (
       !raw ||
       typeof raw !== "object" ||
       Array.isArray(raw) ||
-      raw.schema !== 1
+      raw.schema !== 2
     )
       throw new Error("recipe_schema");
-    const out = { schema: 1 };
+    const out = { schema: 2 };
     for (const k of recipeKeys) {
       if (!Object.prototype.hasOwnProperty.call(raw, k)) {
         // older recipes; Home keeps its value
-        if (
-          k === "cycle_min" ||
-          k === "ok_action" ||
-          k === "air_main" ||
-          k === "brush"
-        )
-          continue;
+        if (k === "cycle_min" || k === "ok_action" || k === "brush") continue;
         throw new Error("recipe_missing");
       }
       out[k] = clone(raw[k]);
@@ -700,7 +790,7 @@
       c.interval_min = 30;
       // Public screens only, factory order; the length of the draft is kept.
       c.enabled = c.enabled.map(
-        (_, i) => screens[i] === "weather" || screens[i] === "feed",
+        (_, i) => screens[i] === "today" || screens[i] === "weather",
       );
       c.order = [...c.order].sort(
         (a, b) => screens.indexOf(a) - screens.indexOf(b),
@@ -744,6 +834,10 @@
     wifiOutcome,
     decodeFrame,
     validate,
+    binDay,
+    binsOn,
+    binsNext,
+    migrateLegacy,
     safeRecipe,
     profile,
   };

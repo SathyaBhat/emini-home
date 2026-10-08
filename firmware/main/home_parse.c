@@ -1,5 +1,6 @@
 #include "home_parse.h"
 #include "cJSON.h"
+#include "home_places.h"
 #include <ctype.h>
 #include <math.h>
 #include <stdio.h>
@@ -24,16 +25,6 @@ static bool space(unsigned char c)
 static int digit(unsigned char c)
 {
     return c >= '0' && c <= '9' ? c - '0' : -1;
-}
-static int hex(unsigned char c)
-{
-    if (digit(c) >= 0)
-        return digit(c);
-    if (c >= 'a' && c <= 'f')
-        return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F')
-        return c - 'A' + 10;
-    return -1;
 }
 static bool number(const char **at, unsigned count, int *result)
 {
@@ -302,6 +293,57 @@ static bool rain(const cJSON *point, double *out)
     return metric(member(member(member(point, "data"), "next_1_hours"), "details"),
                   "precipitation_amount", 0, 1000, false, out);
 }
+static const cJSON *period(const cJSON *point, const char *name)
+{
+    return member(member(point, "data"), name);
+}
+static bool period_rain(const cJSON *point, const char *name, double *out)
+{
+    return metric(member(period(point, name), "details"), "precipitation_amount", 0, 1000, false,
+                  out);
+}
+static const char *period_symbol(const cJSON *point, const char *name)
+{
+    return string_value(member(member(period(point, name), "summary"), "symbol_code"));
+}
+uint8_t home_symbol_code(const char *code)
+{
+    static const struct {
+        const char *part;
+        uint8_t symbol;
+    } families[] = {{"thunder", HOME_SYMBOL_THUNDER},     {"sleet", HOME_SYMBOL_SLEET},
+                    {"snow", HOME_SYMBOL_SNOW},           {"showers", HOME_SYMBOL_SHOWERS},
+                    {"heavyrain", HOME_SYMBOL_HEAVYRAIN}, {"lightrain", HOME_SYMBOL_LIGHTRAIN},
+                    {"rain", HOME_SYMBOL_RAIN},           {"fog", HOME_SYMBOL_FOG},
+                    {"partlycloudy", HOME_SYMBOL_PARTLY}, {"cloudy", HOME_SYMBOL_CLOUDY},
+                    {"fair", HOME_SYMBOL_FAIR},           {"clearsky", HOME_SYMBOL_CLEAR}};
+    if (!code)
+        return HOME_SYMBOL_UNKNOWN;
+    for (size_t i = 0; i < sizeof families / sizeof *families; ++i)
+        if (strstr(code, families[i].part)) {
+            size_t n = strlen(code);
+            bool night = n >= 6 && !strcmp(code + n - 6, "_night");
+            return (uint8_t)(families[i].symbol | (night ? HOME_SYMBOL_NIGHT : 0));
+        }
+    return HOME_SYMBOL_UNKNOWN;
+}
+static int64_t floor_div(int64_t a, int64_t b)
+{
+    int64_t q = a / b;
+    return (a % b != 0 && (a < 0) != (b < 0)) ? q - 1 : q;
+}
+/* Local civil day of a UTC instant. An unknown zone, or an instant outside the pinned table,
+ * falls back to UTC. */
+static int64_t local_day(const char *zone, int64_t at, int32_t *offset_out)
+{
+    int32_t offset = 0;
+    bool dst;
+    if (!zone || !home_tz_offset_at(zone, at, &offset, &dst))
+        offset = 0;
+    if (offset_out)
+        *offset_out = offset;
+    return floor_div(at + offset, 86400);
+}
 static bool unit(const cJSON *units, const char *key, const char *expected)
 {
     const cJSON *value = member(units, key);
@@ -327,7 +369,7 @@ static bool json_members(const cJSON *node, unsigned depth)
 }
 
 bool home_parse_weather(const char *json, size_t len, home_weather_t *out, int64_t now,
-                        char error[97])
+                        const char *zone, char error[97])
 {
     if (!out || now <= 0 || now > INT64_C(253402300799) || !valid_body(json, len) ||
         !json_shape(json, len))
@@ -342,8 +384,10 @@ bool home_parse_weather(const char *json, size_t len, home_weather_t *out, int64
     const char *reason = "Invalid weather schema";
     home_weather_t parsed = {0};
     parsed.low = parsed.high = parsed.precipitation = parsed.wind_speed = parsed.cloud_cover = NAN;
-    for (unsigned i = 0; i < 12; ++i)
+    for (unsigned i = 0; i < HOME_WEATHER_HOURS; ++i) {
         parsed.hourly_temperature[i] = parsed.hourly_rain[i] = NAN;
+        parsed.hourly_wind[i] = NAN;
+    }
     const cJSON *properties = member(root, "properties"), *meta = member(properties, "meta");
     const cJSON *units = member(meta, "units"), *series = member(properties, "timeseries");
     parsed.meta.issued_at = home_parse_time(string_value(member(meta, "updated_at")));
@@ -397,14 +441,19 @@ bool home_parse_weather(const char *json, size_t len, home_weather_t *out, int64
             }
         }
         if (selected_time >= 0 && hours < 24 && at == selected_time + (int64_t)hours * 3600) {
-            if (hours < 12) {
-                parsed.hourly_temperature[hours] = temperature;
-                if (!rain(point, &parsed.hourly_rain[hours])) {
-                    reason = "Invalid hourly precipitation";
-                    goto done;
-                }
-                parsed.hourly_count = (uint8_t)(hours + 1);
+            double wind;
+            if (!rain(point, &parsed.hourly_rain[hours])) {
+                reason = "Invalid hourly precipitation";
+                goto done;
             }
+            if (!metric(instant(point), "wind_speed", 0, 150, false, &wind)) {
+                reason = "Invalid weather metric";
+                goto done;
+            }
+            parsed.hourly_temperature[hours] = temperature;
+            parsed.hourly_wind[hours] = (float)wind;
+            parsed.hourly_symbol[hours] = home_symbol_code(period_symbol(point, "next_1_hours"));
+            parsed.hourly_count = (uint8_t)(hours + 1);
             if (temperature < min24)
                 min24 = temperature;
             if (temperature > max24)
@@ -420,6 +469,58 @@ bool home_parse_weather(const char *json, size_t len, home_weather_t *out, int64
         parsed.low = min24;
         parsed.high = max24;
     }
+    /* Per-local-day summary. Instants give low/high/wind; rain is the interval [at, next_at)
+     * credited to the day of `at`, taken from the period that exactly spans it, so no block is
+     * counted twice. */
+    int64_t today = local_day(zone, now, NULL);
+    double noon_gap[HOME_WEATHER_DAYS];
+    double day_low[HOME_WEATHER_DAYS], day_high[HOME_WEATHER_DAYS];
+    for (unsigned i = 0; i < HOME_WEATHER_DAYS; ++i)
+        noon_gap[i] = INFINITY, day_low[i] = INFINITY, day_high[i] = -INFINITY;
+    for (const cJSON *point = series->child; point; point = point->next) {
+        int64_t at = home_parse_time(string_value(member(point, "time")));
+        int32_t offset;
+        int64_t day = local_day(zone, at, &offset), idx = day - today;
+        if (idx < 0 || idx >= HOME_WEATHER_DAYS)
+            continue;
+        home_day_t *d = &parsed.day[idx];
+        double temperature, wind, amount = 0;
+        if (!metric(instant(point), "air_temperature", -100, 70, true, &temperature) ||
+            !metric(instant(point), "wind_speed", 0, 150, false, &wind)) {
+            reason = "Invalid weather metric";
+            goto done;
+        }
+        d->date = (int32_t)day;
+        if (temperature < day_low[idx])
+            day_low[idx] = temperature;
+        if (temperature > day_high[idx])
+            day_high[idx] = temperature;
+        if (isfinite(wind) && wind > d->wind)
+            d->wind = (float)wind;
+        if (d->samples < UINT8_MAX)
+            ++d->samples;
+        const cJSON *following = point->next;
+        int64_t next_at = following ? home_parse_time(string_value(member(following, "time"))) : -1;
+        const char *span = next_at - at == 3600 ? "next_1_hours"
+                           : next_at - at == 21600 ? "next_6_hours" : NULL;
+        if (span && period_rain(point, span, &amount) && isfinite(amount))
+            d->rain += (float)amount;
+        double gap = fabs((double)(at + offset - day * 86400 - 43200));
+        const char *code = period_symbol(point, "next_6_hours");
+        if (!code)
+            code = period_symbol(point, "next_1_hours");
+        if (code && gap < noon_gap[idx]) {
+            noon_gap[idx] = gap;
+            d->symbol = home_symbol_code(code);
+        }
+    }
+    for (unsigned i = 0; i < HOME_WEATHER_DAYS; ++i) {
+        if (!parsed.day[i].samples)
+            break;
+        parsed.day[i].low = (float)day_low[i];
+        parsed.day[i].high = (float)day_high[i];
+        parsed.day_count = (uint8_t)(i + 1);
+    }
     parsed.meta.valid = true;
     *out = parsed;
     if (error)
@@ -428,732 +529,4 @@ bool home_parse_weather(const char *json, size_t len, home_weather_t *out, int64
 done:
     cJSON_Delete(root);
     return ok ? true : fail(error, reason);
-}
-
-/* Bounded XML pull scanner. It validates the whole document, including ignored
- * extensions, but only projects a small RSS2/Atom subset into application data.
- * No DTD/entity expansion, recursion, resource lookup, or HTML execution. */
-typedef enum { NS_NONE, NS_ATOM, NS_OTHER } namespace_kind_t;
-typedef enum {
-    FIELD_NONE,
-    FIELD_FEED,
-    FIELD_TITLE,
-    FIELD_SOURCE,
-    FIELD_URL,
-    FIELD_PUBLISHED,
-    FIELD_UPDATED
-} field_kind_t;
-typedef struct {
-    char prefix[33];
-    namespace_kind_t kind;
-} namespace_binding_t;
-typedef struct {
-    char name[81];
-    namespace_kind_t ns;
-    field_kind_t field;
-    unsigned namespace_mark;
-    bool skip;
-} xml_node_t;
-typedef struct {
-    char title[1025], source[385], url[1025], published[129], updated[129];
-    bool title_seen, source_seen, published_seen, updated_seen;
-} feed_candidate_t;
-typedef struct {
-    const char *body;
-    size_t len, pos;
-    xml_node_t nodes[XML_DEPTH];
-    unsigned depth;
-    namespace_binding_t bindings[XML_NAMESPACES];
-    unsigned binding_count;
-    bool root_seen, root_closed, atom, in_entry, declaration_seen, channel_seen, best_dated;
-    unsigned entry_depth, entries, tokens;
-    char feed_title[385];
-    bool feed_title_seen, first_entry;
-    feed_candidate_t entry;
-    home_feed_t best;
-    int64_t now;
-} xml_parser_t;
-
-static size_t encode_utf8(uint32_t cp, char out[4])
-{
-    if (cp < 0x80) {
-        out[0] = (char)cp;
-        return 1;
-    }
-    if (cp < 0x800) {
-        out[0] = (char)(0xC0 | (cp >> 6));
-        out[1] = (char)(0x80 | (cp & 63));
-        return 2;
-    }
-    if (cp < 0x10000) {
-        out[0] = (char)(0xE0 | (cp >> 12));
-        out[1] = (char)(0x80 | ((cp >> 6) & 63));
-        out[2] = (char)(0x80 | (cp & 63));
-        return 3;
-    }
-    out[0] = (char)(0xF0 | (cp >> 18));
-    out[1] = (char)(0x80 | ((cp >> 12) & 63));
-    out[2] = (char)(0x80 | ((cp >> 6) & 63));
-    out[3] = (char)(0x80 | (cp & 63));
-    return 4;
-}
-static bool entity(const char *text, size_t len, size_t *used, char decoded[4], size_t *decoded_len)
-{
-    if (!len || text[0] != '&')
-        return false;
-    size_t n = 1;
-    while (n < len && n < 16 && text[n] != ';')
-        ++n;
-    if (n >= len || text[n] != ';')
-        return false;
-    uint32_t cp = 0;
-    if (n == 3 && !memcmp(text, "&lt", 3))
-        cp = '<';
-    else if (n == 3 && !memcmp(text, "&gt", 3))
-        cp = '>';
-    else if (n == 4 && !memcmp(text, "&amp", 4))
-        cp = '&';
-    else if (n == 5 && !memcmp(text, "&quot", 5))
-        cp = '"';
-    else if (n == 5 && !memcmp(text, "&apos", 5))
-        cp = '\'';
-    else if (n > 2 && text[1] == '#') {
-        size_t i = 2;
-        unsigned base = 10;
-        if (text[i] == 'x') {
-            base = 16;
-            ++i;
-        }
-        if (i == n)
-            return false;
-        for (; i < n; ++i) {
-            int value = base == 16 ? hex((unsigned char)text[i]) : digit((unsigned char)text[i]);
-            if (value < 0 || cp > (0x10FFFFU - (unsigned)value) / base)
-                return false;
-            cp = cp * base + (unsigned)value;
-        }
-    } else
-        return false;
-    if (cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF) || (cp & 0xFFFF) >= 0xFFFE ||
-        (cp < 32 && cp != 9 && cp != 10 && cp != 13))
-        return false;
-    *decoded_len = encode_utf8(cp, decoded);
-    *used = n + 1;
-    return true;
-}
-static bool decode_span(const char *text, size_t len, char *out, size_t capacity, bool truncate)
-{
-    size_t written = out ? strlen(out) : 0;
-    bool full = false;
-    for (size_t i = 0; i < len;) {
-        size_t consumed, bytes;
-        char encoded[4];
-        const char *source = text + i;
-        if (text[i] == '&') {
-            if (!entity(text + i, len - i, &consumed, encoded, &bytes))
-                return false;
-            source = encoded;
-        } else {
-            uint32_t cp;
-            if (!utf8_next((const unsigned char *)text + i, len - i, &consumed, &cp))
-                return false;
-            bytes = consumed;
-        }
-        if (out && !full) {
-            if (written + bytes >= capacity) {
-                if (!truncate)
-                    return false;
-                full = true;
-            } else {
-                memcpy(out + written, source, bytes);
-                written += bytes;
-                out[written] = '\0';
-            }
-        }
-        i += consumed;
-    }
-    return true;
-}
-static bool name_first(unsigned char c)
-{
-    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
-}
-static bool name_rest(unsigned char c)
-{
-    return name_first(c) || digit(c) >= 0 || c == '-' || c == '.' || c == ':';
-}
-static bool xml_name(xml_parser_t *p, char out[81])
-{
-    size_t begin = p->pos;
-    if (begin >= p->len || !name_first((unsigned char)p->body[begin]))
-        return false;
-    ++p->pos;
-    while (p->pos < p->len && name_rest((unsigned char)p->body[p->pos]))
-        ++p->pos;
-    size_t n = p->pos - begin;
-    if (n > 80)
-        return false;
-    memcpy(out, p->body + begin, n);
-    out[n] = '\0';
-    const char *colon = strchr(out, ':');
-    return !colon ||
-           (colon != out && name_first((unsigned char)colon[1]) && !strchr(colon + 1, ':'));
-}
-static void xml_space(xml_parser_t *p)
-{
-    while (p->pos < p->len && space((unsigned char)p->body[p->pos]))
-        ++p->pos;
-}
-static const char *local_name(const char *qname)
-{
-    const char *colon = strchr(qname, ':');
-    return colon ? colon + 1 : qname;
-}
-static bool resolve_namespace(const xml_parser_t *p, const char *qname, namespace_kind_t *kind)
-{
-    const char *colon = strchr(qname, ':');
-    size_t length = colon ? (size_t)(colon - qname) : 0;
-    if (length > 32)
-        return false;
-    if (length == 3 && !memcmp(qname, "xml", 3)) {
-        *kind = NS_OTHER;
-        return true;
-    }
-    for (unsigned i = p->binding_count; i > 0; --i) {
-        const namespace_binding_t *binding = &p->bindings[i - 1];
-        if (strlen(binding->prefix) == length && !memcmp(binding->prefix, qname, length)) {
-            *kind = binding->kind;
-            return true;
-        }
-    }
-    if (colon)
-        return false;
-    *kind = NS_NONE;
-    return true;
-}
-static bool bind_namespace(xml_parser_t *p, const char *name, const char *value)
-{
-    const char *prefix = name[5] == ':' ? name + 6 : "";
-    if (strlen(prefix) > 32 || p->binding_count >= XML_NAMESPACES || !strcmp(prefix, "xmlns"))
-        return false;
-    if (!strcmp(prefix, "xml") && strcmp(value, "http://www.w3.org/XML/1998/namespace"))
-        return false;
-    if (*prefix && !*value)
-        return false;
-    namespace_binding_t *binding = &p->bindings[p->binding_count++];
-    snprintf(binding->prefix, sizeof binding->prefix, "%s", prefix);
-    binding->kind = !*value                                         ? NS_NONE
-                    : !strcmp(value, "http://www.w3.org/2005/Atom") ? NS_ATOM
-                                                                    : NS_OTHER;
-    return true;
-}
-static bool absolute_https(const char *url)
-{
-    if (strncmp(url, "https://", 8) || !url[8] || strlen(url) >= HOME_FEED_URL_BYTES)
-        return false;
-    const char *authority = url + 8, *end = authority;
-    while (*end && *end != '/' && *end != '?' && *end != '#')
-        ++end;
-    if (end == authority)
-        return false;
-    for (const char *s = url; *s; ++s)
-        if ((unsigned char)*s <= 32 || (unsigned char)*s >= 127 || *s == '\\' || *s == '"' ||
-            *s == '\'' || *s == '<' || *s == '>')
-            return false;
-    for (const char *s = authority; s < end; ++s)
-        if (*s == '@' || *s == '%' || *s == ':' ||
-            !(isalnum((unsigned char)*s) || *s == '-' || *s == '.'))
-            return false;
-    return true;
-}
-static bool ascii_equal(const char *s, size_t n, const char *word)
-{
-    if (strlen(word) != n)
-        return false;
-    for (size_t i = 0; i < n; ++i)
-        if (tolower((unsigned char)s[i]) != (unsigned char)word[i])
-            return false;
-    return true;
-}
-static void plain_text(const char *input, char *output, size_t capacity)
-{
-    size_t length = strlen(input), written = 0;
-    bool pending_space = false;
-    int suppress = 0;
-    for (size_t i = 0; i < length;) {
-        if (input[i] == '<') {
-            size_t end = i + 1;
-            while (end < length && input[end] != '>')
-                ++end;
-            if (end < length) {
-                size_t begin = i + 1;
-                bool closing = input[begin] == '/';
-                if (closing)
-                    ++begin;
-                size_t stop = begin;
-                while (stop < end && name_rest((unsigned char)input[stop]))
-                    ++stop;
-                if (ascii_equal(input + begin, stop - begin, "script") ||
-                    ascii_equal(input + begin, stop - begin, "style")) {
-                    if (closing) {
-                        if (suppress)
-                            --suppress;
-                    } else
-                        ++suppress;
-                }
-                pending_space = written > 0;
-                i = end + 1;
-                continue;
-            }
-        }
-        size_t used, bytes;
-        uint32_t cp;
-        char decoded[4];
-        const char *source = input + i;
-        if (input[i] == '&' && entity(input + i, length - i, &used, decoded, &bytes)) {
-            size_t ignored;
-            (void)utf8_next((const unsigned char *)decoded, bytes, &ignored, &cp);
-            source = decoded;
-        } else {
-            if (!utf8_next((const unsigned char *)input + i, length - i, &used, &cp))
-                break;
-            bytes = used;
-        }
-        i += used;
-        if (suppress)
-            continue;
-        if (cp == 32 || cp == 9 || cp == 10 || cp == 13 || cp == 0xA0) {
-            pending_space = written > 0;
-            continue;
-        }
-        if (written + bytes + (pending_space ? 1U : 0U) >= capacity)
-            break;
-        if (pending_space) {
-            output[written++] = ' ';
-            pending_space = false;
-        }
-        memcpy(output + written, source, bytes);
-        written += bytes;
-    }
-    output[written] = '\0';
-}
-static void candidate_done(xml_parser_t *p)
-{
-    home_feed_t candidate = {0};
-    plain_text(p->entry.title, candidate.title, sizeof candidate.title);
-    plain_text(p->entry.source, candidate.source, sizeof candidate.source);
-    char date[129], url[1025];
-    plain_text(p->entry.published[0] ? p->entry.published : p->entry.updated, date, sizeof date);
-    bool dated = date[0] != 0;
-    candidate.published_at = dated ? home_parse_time(date) : 0;
-    if (!candidate.title[0] || candidate.published_at < 0 || candidate.published_at > p->now + 300)
-        return;
-    plain_text(p->entry.url, url, sizeof url);
-    if (absolute_https(url) && strlen(url) < sizeof candidate.url)
-        memcpy(candidate.url, url, strlen(url) + 1);
-    candidate.meta.valid = true;
-    candidate.meta.issued_at = candidate.published_at;
-    if (!p->best.meta.valid ||
-        (!p->first_entry &&
-         ((dated && !p->best_dated) ||
-          (dated && p->best_dated && candidate.published_at > p->best.published_at)))) {
-        p->best = candidate;
-        p->best_dated = dated;
-    }
-}
-static char *field_buffer(xml_parser_t *p, field_kind_t field, size_t *capacity)
-{
-#define FIELD_CASE(label, member)                                                                  \
-    case label:                                                                                    \
-        *capacity = sizeof(p->member);                                                             \
-        return p->member
-    switch (field) {
-        FIELD_CASE(FIELD_FEED, feed_title);
-        FIELD_CASE(FIELD_TITLE, entry.title);
-        FIELD_CASE(FIELD_SOURCE, entry.source);
-        FIELD_CASE(FIELD_URL, entry.url);
-        FIELD_CASE(FIELD_PUBLISHED, entry.published);
-        FIELD_CASE(FIELD_UPDATED, entry.updated);
-    default:
-        *capacity = 0;
-        return NULL;
-    }
-#undef FIELD_CASE
-}
-static bool xml_text(xml_parser_t *p, const char *text, size_t len, bool cdata)
-{
-    if (!p->depth) {
-        if (cdata)
-            return false;
-        for (size_t i = 0; i < len; ++i)
-            if (!space((unsigned char)text[i]))
-                return false;
-        return true;
-    }
-    xml_node_t *node = &p->nodes[p->depth - 1];
-    size_t capacity = 0;
-    char *out = node->skip ? NULL : field_buffer(p, node->field, &capacity);
-    if (!cdata)
-        return decode_span(text, len, out, capacity, true);
-    if (out) {
-        size_t written = strlen(out);
-        for (size_t i = 0; i < len;) {
-            size_t used;
-            uint32_t cp;
-            if (!utf8_next((const unsigned char *)text + i, len - i, &used, &cp))
-                return false;
-            if (written + used >= capacity)
-                break;
-            memcpy(out + written, text + i, used);
-            written += used;
-            i += used;
-        }
-        out[written] = '\0';
-    }
-    return true;
-}
-static bool direct_field(xml_parser_t *p, xml_node_t *node, const char *type)
-{
-    const char *name = local_name(node->name);
-    bool expected_ns = p->atom ? node->ns == NS_ATOM : node->ns == NS_NONE;
-    if (!expected_ns)
-        return true;
-    if (!p->in_entry &&
-        ((p->atom && p->depth == 1) ||
-         (!p->atom && p->depth == 2 && !strcmp(p->nodes[1].name, "channel"))) &&
-        !strcmp(name, "title")) {
-        if (p->feed_title_seen)
-            return false;
-        p->feed_title_seen = true;
-        node->field = FIELD_FEED;
-    } else if (p->in_entry && p->depth == p->entry_depth) {
-        if (!strcmp(name, "title")) {
-            if (p->entry.title_seen)
-                return false;
-            p->entry.title_seen = true;
-            node->field = FIELD_TITLE;
-            if (p->atom && *type && strcmp(type, "text") && strcmp(type, "html") &&
-                strcmp(type, "xhtml"))
-                return false;
-        } else if (!strcmp(name, "source") && !p->atom) {
-            if (p->entry.source_seen)
-                return false;
-            p->entry.source_seen = true;
-            node->field = FIELD_SOURCE;
-        } else if ((!p->atom && !strcmp(name, "pubDate")) ||
-                   (p->atom && !strcmp(name, "published"))) {
-            if (p->entry.published_seen)
-                return false;
-            p->entry.published_seen = true;
-            node->field = FIELD_PUBLISHED;
-        } else if (p->atom && !strcmp(name, "updated")) {
-            if (p->entry.updated_seen)
-                return false;
-            p->entry.updated_seen = true;
-            node->field = FIELD_UPDATED;
-        } else if (!p->atom && !strcmp(name, "link"))
-            node->field = FIELD_URL;
-    } else if (p->atom && p->in_entry && p->depth == p->entry_depth + 1 && !strcmp(name, "title") &&
-               !strcmp(local_name(p->nodes[p->depth - 1].name), "source")) {
-        if (p->entry.source_seen)
-            return false;
-        p->entry.source_seen = true;
-        node->field = FIELD_SOURCE;
-    }
-    return true;
-}
-static bool xml_close(xml_parser_t *p, const char *name)
-{
-    if (!p->depth || strcmp(p->nodes[p->depth - 1].name, name))
-        return false;
-    if (p->in_entry && p->depth == p->entry_depth) {
-        candidate_done(p);
-        p->in_entry = false;
-    }
-    p->binding_count = p->nodes[p->depth - 1].namespace_mark;
-    --p->depth;
-    if (!p->depth)
-        p->root_closed = true;
-    return true;
-}
-static bool xml_open(xml_parser_t *p)
-{
-    if (p->depth >= XML_DEPTH || p->root_closed)
-        return false;
-    xml_node_t node = {0};
-    node.namespace_mark = p->binding_count;
-    if (p->depth) {
-        node.field = p->nodes[p->depth - 1].field;
-        node.skip = p->nodes[p->depth - 1].skip;
-    }
-    if (!xml_name(p, node.name))
-        return false;
-    char attribute_names[16][81], href[1025] = "", rel[65] = "", type[65] = "";
-    unsigned attributes = 0;
-    bool self_closed = false;
-    while (p->pos < p->len) {
-        size_t before_space = p->pos;
-        xml_space(p);
-        if (p->pos >= p->len)
-            return false;
-        char c = p->body[p->pos];
-        if (c == '>') {
-            ++p->pos;
-            break;
-        }
-        if (c == '/' && p->pos + 1 < p->len && p->body[p->pos + 1] == '>') {
-            p->pos += 2;
-            self_closed = true;
-            break;
-        }
-        if (before_space == p->pos || attributes >= 16)
-            return false;
-        char name[81], value[1025] = "";
-        if (!xml_name(p, name))
-            return false;
-        for (unsigned i = 0; i < attributes; ++i)
-            if (!strcmp(name, attribute_names[i]))
-                return false;
-        snprintf(attribute_names[attributes++], 81, "%s", name);
-        xml_space(p);
-        if (p->pos >= p->len || p->body[p->pos++] != '=')
-            return false;
-        xml_space(p);
-        if (p->pos >= p->len || (p->body[p->pos] != '\'' && p->body[p->pos] != '"'))
-            return false;
-        char quote = p->body[p->pos++];
-        size_t begin = p->pos;
-        while (p->pos < p->len && p->body[p->pos] != quote) {
-            if (p->body[p->pos] == '<')
-                return false;
-            ++p->pos;
-        }
-        if (p->pos >= p->len ||
-            !decode_span(p->body + begin, p->pos - begin, value, sizeof value, false))
-            return false;
-        ++p->pos;
-        if (!strcmp(name, "xmlns") || !strncmp(name, "xmlns:", 6)) {
-            if (!bind_namespace(p, name, value))
-                return false;
-        } else if (!strcmp(name, "href"))
-            snprintf(href, sizeof href, "%s", value);
-        else if (!strcmp(name, "rel")) {
-            if (strlen(value) >= sizeof rel)
-                return false;
-            memcpy(rel, value, strlen(value) + 1);
-        } else if (!strcmp(name, "type")) {
-            if (strlen(value) >= sizeof type)
-                return false;
-            memcpy(type, value, strlen(value) + 1);
-        }
-    }
-    if (!p->pos || p->body[p->pos - 1] != '>' || !resolve_namespace(p, node.name, &node.ns))
-        return false;
-    for (unsigned i = 0; i < attributes; ++i) {
-        const char *name = attribute_names[i];
-        namespace_kind_t ignored;
-        if (strchr(name, ':') && strncmp(name, "xmlns:", 6) &&
-            !resolve_namespace(p, name, &ignored))
-            return false;
-    }
-    const char *name = local_name(node.name);
-    if (!p->depth) {
-        if (p->root_seen)
-            return false;
-        p->root_seen = true;
-        if (!strcmp(name, "feed") && node.ns == NS_ATOM)
-            p->atom = true;
-        else if (strcmp(name, "rss") || node.ns != NS_NONE)
-            return false;
-    }
-    if (!p->atom && p->depth == 1 && node.ns == NS_NONE && !strcmp(name, "channel")) {
-        if (p->channel_seen)
-            return false;
-        p->channel_seen = true;
-    }
-    bool is_entry = p->atom ? (p->depth == 1 && node.ns == NS_ATOM && !strcmp(name, "entry"))
-                            : (p->depth == 2 && node.ns == NS_NONE && !strcmp(name, "item") &&
-                               !strcmp(p->nodes[1].name, "channel"));
-    if (is_entry) {
-        if (p->in_entry || ++p->entries > XML_ITEMS)
-            return false;
-        p->in_entry = true;
-        p->entry_depth = p->depth + 1;
-        memset(&p->entry, 0, sizeof p->entry);
-    } else if (!direct_field(p, &node, type))
-        return false;
-    if (p->atom && p->in_entry && p->depth == p->entry_depth && node.ns == NS_ATOM &&
-        !strcmp(name, "link") && (!*rel || !strcmp(rel, "alternate")) && !p->entry.url[0] &&
-        absolute_https(href))
-        snprintf(p->entry.url, sizeof p->entry.url, "%s", href);
-    if (ascii_equal(name, strlen(name), "script") || ascii_equal(name, strlen(name), "style"))
-        node.skip = true;
-    p->nodes[p->depth++] = node;
-    return !self_closed || xml_close(p, node.name);
-}
-static const char *find_span(const char *begin, size_t len, const char *needle)
-{
-    size_t n = strlen(needle);
-    if (n > len)
-        return NULL;
-    for (size_t i = 0; i <= len - n; ++i)
-        if (!memcmp(begin + i, needle, n))
-            return begin + i;
-    return NULL;
-}
-static bool xml_declaration(xml_parser_t *p)
-{
-    size_t initial = (p->len >= 3 && !memcmp(p->body, "\xEF\xBB\xBF", 3)) ? 3U : 0U;
-    if (p->declaration_seen || p->pos != initial || p->len - p->pos < 6 ||
-        memcmp(p->body + p->pos, "<?xml", 5) || !space((unsigned char)p->body[p->pos + 5]))
-        return false;
-    p->pos += 5;
-    unsigned attributes = 0;
-    bool encoding = false, standalone = false;
-    for (;;) {
-        size_t before = p->pos;
-        xml_space(p);
-        if (p->pos + 1 < p->len && p->body[p->pos] == '?' && p->body[p->pos + 1] == '>') {
-            if (!attributes)
-                return false;
-            p->pos += 2;
-            p->declaration_seen = true;
-            return true;
-        }
-        char name[81], value[33];
-        if (before == p->pos || ++attributes > 3 || !xml_name(p, name))
-            return false;
-        xml_space(p);
-        if (p->pos >= p->len || p->body[p->pos++] != '=')
-            return false;
-        xml_space(p);
-        if (p->pos >= p->len || (p->body[p->pos] != '\'' && p->body[p->pos] != '"'))
-            return false;
-        char quote = p->body[p->pos++];
-        size_t begin = p->pos;
-        while (p->pos < p->len && p->body[p->pos] != quote)
-            ++p->pos;
-        size_t n = p->pos - begin;
-        if (p->pos >= p->len || n >= sizeof value)
-            return false;
-        memcpy(value, p->body + begin, n);
-        value[n] = '\0';
-        ++p->pos;
-        if (attributes == 1) {
-            if (strcmp(name, "version") || strcmp(value, "1.0"))
-                return false;
-        } else if (!strcmp(name, "encoding") && !encoding && !standalone) {
-            if (!ascii_equal(value, n, "utf-8"))
-                return false;
-            encoding = true;
-        } else if (!strcmp(name, "standalone") && !standalone) {
-            if (strcmp(value, "yes") && strcmp(value, "no"))
-                return false;
-            standalone = true;
-        } else
-            return false;
-    }
-}
-static bool scan_xml(xml_parser_t *p)
-{
-    if (p->len >= 3 && !memcmp(p->body, "\xEF\xBB\xBF", 3))
-        p->pos = 3;
-    while (p->pos < p->len) {
-        if (++p->tokens > 8192)
-            return false;
-        if (p->body[p->pos] != '<') {
-            size_t begin = p->pos;
-            while (p->pos < p->len && p->body[p->pos] != '<')
-                ++p->pos;
-            if (find_span(p->body + begin, p->pos - begin, "]]>") ||
-                !xml_text(p, p->body + begin, p->pos - begin, false))
-                return false;
-            continue;
-        }
-        const char *start = p->body + p->pos;
-        size_t left = p->len - p->pos;
-        if (left >= 4 && !memcmp(start, "<!--", 4)) {
-            const char *end = find_span(start + 4, left - 4, "-->");
-            if (!end || (end > start + 4 && end[-1] == '-') ||
-                find_span(start + 4, (size_t)(end - start - 4), "--"))
-                return false;
-            p->pos = (size_t)(end - p->body) + 3;
-            continue;
-        }
-        if (left >= 9 && !memcmp(start, "<![CDATA[", 9)) {
-            const char *end = find_span(start + 9, left - 9, "]]>");
-            if (!end || !xml_text(p, start + 9, (size_t)(end - start - 9), true))
-                return false;
-            p->pos = (size_t)(end - p->body) + 3;
-            continue;
-        }
-        if (left >= 2 && start[1] == '?') {
-            /* A leading XML declaration (UTF-8 input), then any other processing
-             * instruction, such as <?xml-stylesheet ...?>, is skipped whole. */
-            if (left >= 6 && !memcmp(start, "<?xml", 5) && space((unsigned char)start[5])) {
-                if (!xml_declaration(p))
-                    return false;
-                continue;
-            }
-            const char *end = find_span(start + 2, left - 2, "?>");
-            if (!end || end == start + 2)
-                return false;
-            p->pos = (size_t)(end - p->body) + 2;
-            continue;
-        }
-        if (left >= 2 && start[1] == '!')
-            return false;
-        ++p->pos;
-        if (p->pos < p->len && p->body[p->pos] == '/') {
-            ++p->pos;
-            char name[81];
-            if (!xml_name(p, name))
-                return false;
-            xml_space(p);
-            if (p->pos >= p->len || p->body[p->pos++] != '>' || !xml_close(p, name))
-                return false;
-        } else if (!xml_open(p))
-            return false;
-    }
-    return p->root_seen && p->root_closed && !p->depth && p->best.meta.valid;
-}
-
-static bool parse_feed(const char *xml, size_t len, home_feed_t *out, int64_t now, char error[97],
-                       bool first_entry)
-{
-    if (!out || now <= 0 || now > INT64_C(253402300799) || !valid_body(xml, len))
-        return fail(error, "Invalid or oversized feed XML");
-    xml_parser_t *parser = calloc(1, sizeof *parser);
-    if (!parser)
-        return fail(error, "Feed parser memory unavailable");
-    parser->body = xml;
-    parser->len = len;
-    parser->now = now;
-    parser->first_entry = first_entry;
-    bool ok = scan_xml(parser);
-    if (ok) {
-        if (!parser->best.source[0])
-            plain_text(parser->feed_title, parser->best.source, sizeof parser->best.source);
-        if (!parser->best.source[0])
-            snprintf(parser->best.source, sizeof parser->best.source, "Feed");
-        *out = parser->best;
-    }
-    free(parser);
-    if (ok) {
-        if (error)
-            error[0] = '\0';
-        return true;
-    }
-    return fail(error, "Malformed feed or no valid entry");
-}
-
-bool home_parse_feed(const char *xml, size_t len, home_feed_t *out, int64_t now, char error[97])
-{
-    return parse_feed(xml, len, out, now, error, false);
-}
-
-bool home_parse_feed_first(const char *xml, size_t len, home_feed_t *out, int64_t now,
-                           char error[97])
-{
-    return parse_feed(xml, len, out, now, error, true);
 }

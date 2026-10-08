@@ -7,7 +7,7 @@
 #include "home_config.h"
 #include "home_places.h"
 #include "home_wake.h"
-#include "home_picture.h"
+#include "home_bins.h"
 #include "esp_http_server.h"
 #include "esp_timer.h"
 #include "esp_random.h"
@@ -150,42 +150,6 @@ static char *body(httpd_req_t *r)
     }
     return b;
 }
-/* POST /api/picture: exactly one raw frame, packed like home_render()'s output. Stored first, then
- * drawn only if Picture is on the display now; showing it is /api/show, as for every screen. */
-static esp_err_t picture_upload(httpd_req_t *r)
-{
-    char type[48];
-    if (!header(r, "Content-Type", type, sizeof(type)) ||
-        strcmp(type, "application/octet-stream") || r->content_len != HOME_FRAME_BYTES)
-        return error(r, "400 Bad Request", "Expected a 30000 byte application/octet-stream frame");
-    uint8_t *frame = malloc(HOME_FRAME_BYTES);
-    if (!frame)
-        return error(r, "503 Service Unavailable", "out_of_memory");
-    size_t pos = 0;
-    int64_t start = esp_timer_get_time();
-    while (pos < HOME_FRAME_BYTES) {
-        int n = esp_timer_get_time() - start > 10000000
-                    ? -1
-                    : httpd_req_recv(r, (char *)frame + pos, HOME_FRAME_BYTES - pos);
-        if (n <= 0) {
-            free(frame);
-            return error(r, "400 Bad Request", "Frame did not arrive");
-        }
-        pos += n;
-    }
-    esp_err_t e = home_picture_store(frame);
-    free(frame);
-    if (e != ESP_OK)
-        return error(r, "503 Service Unavailable", "Picture was not saved");
-    home_lock();
-    if (home_runtime.displayed_screen == HOME_PICTURE ||
-        home_runtime.pending_screen == HOME_PICTURE) {
-        home_runtime.dirty = true;
-        home_runtime.request_id++;
-    }
-    home_unlock();
-    return accepted(r);
-}
 static cJSON *small_json(const char *b)
 {
     int depth = 0;
@@ -248,14 +212,11 @@ static cJSON *meta_json(const home_source_meta_t *m)
     }
     return j;
 }
-static cJSON *feed_json(const home_feed_t *f)
+/* The weather source plus how many local days the last forecast filled (day[]). */
+static cJSON *weather_json(const home_weather_t *w)
 {
-    cJSON *j = meta_json(&f->meta);
-    bool ok = j && cJSON_AddStringToObject(j, "title", f->title) &&
-              cJSON_AddStringToObject(j, "source", f->source) &&
-              cJSON_AddStringToObject(j, "url", f->url) &&
-              cJSON_AddNumberToObject(j, "published_at", f->published_at);
-    if (!ok) {
+    cJSON *j = meta_json(&w->meta);
+    if (!j || !cJSON_AddNumberToObject(j, "day_count", w->day_count)) {
         cJSON_Delete(j);
         return NULL;
     }
@@ -390,9 +351,43 @@ static esp_err_t status(httpd_req_t *r, int token)
              cJSON_AddNumberToObject(power, "free_s", (double)pw.free_s);
 
         cJSON *sources = ok ? cJSON_AddObjectToObject(j, "sources") : NULL;
-        ok = ok && sources && json_child(sources, "weather", meta_json(&h->data.weather.meta)) &&
-             json_child(sources, "feed", feed_json(&h->data.feed)) &&
+        ok = ok && sources && json_child(sources, "weather", weather_json(&h->data.weather)) &&
              json_child(sources, "air", meta_json(&h->data.air.meta));
+        cJSON *next = ok ? cJSON_AddArrayToObject(j, "bins_next") : NULL;
+        ok = ok && next;
+        struct tm lt;
+        if (ok && h->config.bin_count && time(NULL) > 1600000000 &&
+            home_localtime(&h->config, time(NULL), &lt)) {
+            int32_t day = home_days_from_civil(lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday);
+            for (int i = 0; ok && i < 4; i++) {
+                unsigned mask;
+                day = home_bins_next(&h->config, day, &mask);
+                if (day < 0)
+                    break;
+                int y, m, d;
+                home_civil_from_days(day, &y, &m, &d);
+                char date[16];
+                snprintf(date, sizeof date, "%04d-%02d-%02d", y, m, d);
+                cJSON *e = cJSON_CreateObject(), *names = cJSON_CreateArray();
+                ok = e && names && cJSON_AddStringToObject(e, "date", date) &&
+                     cJSON_AddItemToObject(e, "bins", names) && cJSON_AddItemToArray(next, e);
+                if (!ok) {
+                    cJSON_Delete(names);
+                    cJSON_Delete(e);
+                    break;
+                }
+                for (int k = 0; ok && k < h->config.bin_count; k++)
+                    if (mask & (1U << k)) {
+                        const home_bin_t *b = &h->config.bins[k];
+                        static const char *const colour[] = {"black", "white", "yellow", "red"};
+                        cJSON *s = cJSON_CreateString(b->label[0] ? b->label : colour[b->colour & 3]);
+                        ok = s && cJSON_AddItemToArray(names, s);
+                        if (!ok)
+                            cJSON_Delete(s);
+                    }
+                day++;
+            }
+        }
     }
     home_unlock();
     if (!ok) {
@@ -458,10 +453,12 @@ static esp_err_t preview(httpd_req_t *r, const char *draft, bool confirmed, bool
             free(frame);
             return error(r, "400 Bad Request", why);
         }
-        if (parsed.latitude != c->latitude || parsed.longitude != c->longitude)
+        /* day[] is bucketed by local day, so a new zone makes the cached forecast wrong. */
+        if (parsed.latitude != c->latitude || parsed.longitude != c->longitude ||
+            strcmp(parsed.timezone, c->timezone))
             memset(&d->weather, 0, sizeof(d->weather));
-        if (strcmp(parsed.feed_url, c->feed_url))
-            memset(&d->feed, 0, sizeof(d->feed));
+        if (!parsed.alerts_air)
+            memset(&d->air, 0, sizeof(d->air));
         *c = parsed;
     }
     if (!confirmed) {
@@ -497,7 +494,7 @@ static esp_err_t api_inner(httpd_req_t *r)
         return error(r, "401 Unauthorized", "Pair this phone with the code on Home");
     /* Breath mode: a paired phone in use keeps the device reachable - paired only, because a
      * pairing attempt passes the check above without a token (0.6.2). Not what the
-     * panel reads by itself - the status (answered above), the picture after it changed, and
+     * panel reads by itself - the status (answered above), the frame after it changed, and
      * requests marked X-Home-Auto - or a tab left open would keep the radio on. */
     if (token >= 0 && !(r->method == HTTP_GET && !strcmp(path, "/api/frame")) &&
         !httpd_req_get_hdr_value_len(r, "X-Home-Auto")) {
@@ -555,8 +552,6 @@ static esp_err_t api_inner(httpd_req_t *r)
     }
     if (r->method != HTTP_POST && !(r->method == HTTP_PUT && !strcmp(path, "/api/config")))
         return error(r, "405 Method Not Allowed", "Method not allowed");
-    if (!strcmp(path, "/api/picture"))
-        return picture_upload(r);
     char *b = body(r);
     if (!b)
         return error(r, "400 Bad Request", "Expected bounded JSON body");
@@ -595,8 +590,10 @@ static esp_err_t api_inner(httpd_req_t *r)
             memset(&home_runtime.data.weather, 0, sizeof(home_runtime.data.weather));
             memset(&home_runtime.data.air, 0, sizeof(home_runtime.data.air));
         }
-        if (strcmp(c.feed_url, home_runtime.config.feed_url))
-            memset(&home_runtime.data.feed, 0, sizeof(home_runtime.data.feed));
+        if (strcmp(c.timezone, home_runtime.config.timezone))
+            memset(&home_runtime.data.weather, 0, sizeof(home_runtime.data.weather));
+        if (!c.alerts_air)
+            memset(&home_runtime.data.air, 0, sizeof(home_runtime.data.air));
         home_runtime.refresh_requested &= home_sources_wanted(&c);
         home_runtime.config = c;
         home_runtime.request_id++; /* Save changes settings; explicit Show publishes them. */
@@ -748,17 +745,16 @@ static esp_err_t api_inner(httpd_req_t *r)
     if (!strcmp(path, "/api/refresh")) {
         cJSON *v = cJSON_GetObjectItemCaseSensitive(j, "source");
         if (!only(j, "source", NULL) || !cJSON_IsString(v) ||
-            (strcmp(v->valuestring, "weather") && strcmp(v->valuestring, "feed") &&
-             strcmp(v->valuestring, "air") && strcmp(v->valuestring, "all"))) {
+            (strcmp(v->valuestring, "weather") && strcmp(v->valuestring, "air") &&
+             strcmp(v->valuestring, "all"))) {
             result = error(r, "400 Bad Request", "Unknown source");
             goto done;
         }
         unsigned mask = !strcmp(v->valuestring, "weather") ? 1U
-                        : !strcmp(v->valuestring, "feed")  ? 2U
                         : !strcmp(v->valuestring, "air")   ? 4U
-                                                           : 7U;
+                                                           : 5U;
         home_lock();
-        /* Only a source whose screen is on and has a place or an address is asked. */
+        /* Only a source that is switched on and has a place is asked. */
         mask &= home_sources_wanted(&home_runtime.config);
         home_runtime.refresh_requested |= mask;
         home_unlock();

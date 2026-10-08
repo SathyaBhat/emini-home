@@ -1001,7 +1001,7 @@ esp_err_t home_fetch_weather(const home_config_t *c, home_weather_t *w, int64_t 
     }
     char error[97] = "Weather connection failed";
     home_weather_t candidate;
-    if (e == ESP_OK && !home_parse_weather(body, size, &candidate, now, error))
+    if (e == ESP_OK && !home_parse_weather(body, size, &candidate, now, c->timezone, error))
         e = ESP_FAIL;
     free(body);
     if (e == ESP_OK) {
@@ -1017,49 +1017,6 @@ esp_err_t home_fetch_weather(const home_config_t *c, home_weather_t *w, int64_t 
     }
     return e;
 }
-esp_err_t home_fetch_feed(const home_config_t *c, home_feed_t *f, int64_t now)
-{
-    if (!c->feed_url[0] || now < 1704067200 || now < f->meta.next_fetch)
-        return ESP_ERR_INVALID_STATE;
-    headers_t h = {0};
-    char *body = NULL;
-    size_t size = 0;
-    esp_err_t e = fetch(c->feed_url, &f->meta, &h, &body, &size);
-    if (e == ESP_OK && h.status == 304) {
-        metadata(&f->meta, &h, now, false);
-        return ESP_OK;
-    }
-    char error[97] = "Feed connection failed";
-    home_feed_t candidate;
-    if (e == ESP_OK) {
-        /* BBC World is ordered by the publisher. A newer brief must not
-         * displace its lead story merely because its timestamp is later. */
-        bool editorial = !strcmp(c->feed_url, "https://feeds.bbci.co.uk/news/world/rss.xml");
-        bool parsed = editorial ? home_parse_feed_first(body, size, &candidate, now, error)
-                                : home_parse_feed(body, size, &candidate, now, error);
-        if (!parsed)
-            e = ESP_FAIL;
-    }
-    free(body);
-    if (e == ESP_OK) {
-        int64_t issue = candidate.meta.issued_at;
-        candidate.meta = f->meta;
-        candidate.meta.issued_at = issue;
-        metadata(&candidate.meta, &h, now, true);
-        if (!candidate.url[0])
-            snprintf(candidate.url, sizeof(candidate.url), "%s", c->feed_url);
-        *f = candidate;
-    } else {
-        if (h.status && h.status != 200)
-            snprintf(error, sizeof(error), "Feed HTTP %d", h.status);
-        failed(&f->meta, &h, now, error);
-    }
-    return e;
-}
-
-/* Air quality, UV and pollen. The host is locked: a redirect must not be able to
- * carry the coordinates anywhere but Open-Meteo. The body is bounded by the same
- * 128 KiB wire limit as every other source and the parser keeps 24 hours of it. */
 esp_err_t home_fetch_air(const home_config_t *c, home_air_t *a, int64_t now)
 {
     if (!c->location_ready || now < 1704067200 || now < a->meta.next_fetch)
